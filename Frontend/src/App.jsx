@@ -4,7 +4,7 @@ import {
   Route,
   Navigate,
 } from "react-router-dom";
-import Login from "./components/login";
+import Login from "./components/Login";
 import Sidebar from "./components/SidePannel";
 import NavBar from "./components/NavBar";
 import Dashboard from "./pages/dashboard";
