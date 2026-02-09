@@ -18,10 +18,14 @@ import {
   Square,
   PlusCircle,
   MinusCircle,
+  Settings,
+  Edit2,
+  Tag,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 const STORAGE_KEY = "customer_db_grouped_v4";
+const PARTY_TYPES_KEY = "party_types_v1";
 const ITEMS_PER_PAGE = 10;
 
 const CustomerDatabase = () => {
@@ -30,8 +34,14 @@ const CustomerDatabase = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState("All");
 
+  // --- Party Types Management ---
+  const [partyTypes, setPartyTypes] = useState([]);
+  const [showPartyTypeModal, setShowPartyTypeModal] = useState(false);
+  const [editingType, setEditingType] = useState(null); // {id, name}
+  const [newTypeName, setNewTypeName] = useState("");
+
   // --- Selection State ---
-  const [selectedItems, setSelectedItems] = useState(new Set()); // Stores Item Codes now
+  const [selectedItems, setSelectedItems] = useState(new Set());
 
   // --- Pagination State ---
   const [currentPage, setCurrentPage] = useState(1);
@@ -53,36 +63,76 @@ const CustomerDatabase = () => {
     issues: [],
   });
 
-  // --- Manual Add Form State (Updated for Multiple Items) ---
+  // --- Manual Add Form State ---
   const [newEntry, setNewEntry] = useState({
     partyCode: "",
     partyDescription: "",
-    partyType: "OEM",
-    items: [{ itemCode: "", itemDescription: "" }], // Array for multiple items
+    partyType: "",
+    items: [{ itemCode: "", itemDescription: "" }],
   });
 
   const fileInputRef = useRef(null);
 
   // --- 1. Load & Save ---
   useEffect(() => {
+    // Load Party Types
+    const storedTypes = localStorage.getItem(PARTY_TYPES_KEY);
+    if (storedTypes) {
+      try {
+        setPartyTypes(JSON.parse(storedTypes));
+      } catch (e) {
+        console.error("Error loading party types", e);
+        // Set default types if error
+        const defaultTypes = [
+          { id: 1, name: "OEM" },
+          { id: 2, name: "End Customer" },
+        ];
+        setPartyTypes(defaultTypes);
+        localStorage.setItem(PARTY_TYPES_KEY, JSON.stringify(defaultTypes));
+      }
+    } else {
+      // Initialize with default types
+      const defaultTypes = [
+        { id: 1, name: "OEM" },
+        { id: 2, name: "End Customer" },
+      ];
+      setPartyTypes(defaultTypes);
+      localStorage.setItem(PARTY_TYPES_KEY, JSON.stringify(defaultTypes));
+    }
+
+    // Load Customer DB
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
-      // Sort by Party Code on load to ensure grouping works
-      const parsed = JSON.parse(stored);
-      const sorted = parsed.sort((a, b) =>
-        a.partyCode.localeCompare(b.partyCode),
-      );
-      setData(sorted);
+      try {
+        const parsed = JSON.parse(stored);
+        const sorted = parsed.sort((a, b) =>
+          a.partyCode.localeCompare(b.partyCode),
+        );
+        setData(sorted);
+      } catch (e) {
+        console.error("Error loading DB", e);
+      }
     }
   }, []);
 
+  // Set default party type when types load
+  useEffect(() => {
+    if (partyTypes.length > 0 && !newEntry.partyType) {
+      setNewEntry((prev) => ({ ...prev, partyType: partyTypes[0].name }));
+    }
+  }, [partyTypes]);
+
   const saveToStorage = (newData) => {
-    // Always sort by Party Code so row-span works correctly
     const sortedData = [...newData].sort((a, b) =>
       a.partyCode.localeCompare(b.partyCode),
     );
     setData(sortedData);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(sortedData));
+  };
+
+  const savePartyTypes = (types) => {
+    setPartyTypes(types);
+    localStorage.setItem(PARTY_TYPES_KEY, JSON.stringify(types));
   };
 
   // --- 2. Helpers ---
@@ -91,7 +141,101 @@ const CustomerDatabase = () => {
       .toLowerCase()
       .replace(/[^a-z0-9]/g, "");
 
-  // --- 3. Manual Add Logic (Multiple Items) ---
+  // --- 3. Party Type Management Functions ---
+  const handleAddPartyType = () => {
+    if (!newTypeName.trim()) {
+      alert("Please enter a party type name");
+      return;
+    }
+
+    // Check for duplicates
+    if (partyTypes.some((t) => t.name.toLowerCase() === newTypeName.trim().toLowerCase())) {
+      alert("This party type already exists!");
+      return;
+    }
+
+    const newType = {
+      id: Date.now(),
+      name: newTypeName.trim(),
+    };
+
+    savePartyTypes([...partyTypes, newType]);
+    setNewTypeName("");
+  };
+
+  const handleUpdatePartyType = () => {
+    if (!editingType || !editingType.name.trim()) {
+      alert("Please enter a valid name");
+      return;
+    }
+
+    // Check for duplicates (excluding current)
+    if (
+      partyTypes.some(
+        (t) =>
+          t.id !== editingType.id &&
+          t.name.toLowerCase() === editingType.name.trim().toLowerCase()
+      )
+    ) {
+      alert("This party type already exists!");
+      return;
+    }
+
+    const oldName = partyTypes.find((t) => t.id === editingType.id)?.name;
+    const newName = editingType.name.trim();
+
+    // Update in party types list
+    const updatedTypes = partyTypes.map((t) =>
+      t.id === editingType.id ? { ...t, name: newName } : t
+    );
+    savePartyTypes(updatedTypes);
+
+    // Update all data entries with the old name
+    if (oldName !== newName) {
+      const updatedData = data.map((row) =>
+        row.partyType === oldName ? { ...row, partyType: newName } : row
+      );
+      saveToStorage(updatedData);
+    }
+
+    setEditingType(null);
+  };
+
+  const handleDeletePartyType = (typeId) => {
+    const typeToDelete = partyTypes.find((t) => t.id === typeId);
+    
+    if (partyTypes.length === 1) {
+      alert("Cannot delete the last party type! At least one type must exist.");
+      return;
+    }
+
+    // Check if any data uses this type
+    const usageCount = data.filter((row) => row.partyType === typeToDelete.name).length;
+    
+    if (usageCount > 0) {
+      if (!confirm(`This party type is used in ${usageCount} records. Are you sure you want to delete it? Those records will need to be reassigned.`)) {
+        return;
+      }
+    }
+
+    if (confirm(`Delete party type "${typeToDelete.name}"?`)) {
+      const updatedTypes = partyTypes.filter((t) => t.id !== typeId);
+      savePartyTypes(updatedTypes);
+
+      // Update data entries - set to first remaining type
+      if (usageCount > 0) {
+        const newDefaultType = updatedTypes[0].name;
+        const updatedData = data.map((row) =>
+          row.partyType === typeToDelete.name
+            ? { ...row, partyType: newDefaultType }
+            : row
+        );
+        saveToStorage(updatedData);
+      }
+    }
+  };
+
+  // --- 4. Manual Add Logic (Multiple Items) ---
   const handleAddItemRow = () => {
     setNewEntry({
       ...newEntry,
@@ -115,7 +259,6 @@ const CustomerDatabase = () => {
   const handleManualSubmit = (e) => {
     e.preventDefault();
 
-    // Check for duplicate Item Codes in DB
     const duplicateItems = newEntry.items.filter((newItem) =>
       data.some((d) => cleanStr(d.itemCode) === cleanStr(newItem.itemCode)),
     );
@@ -127,7 +270,6 @@ const CustomerDatabase = () => {
       return;
     }
 
-    // Flatten the structure for storage (One Party -> Many Rows)
     const newRows = newEntry.items.map((item) => ({
       partyCode: newEntry.partyCode,
       partyDescription: newEntry.partyDescription,
@@ -142,12 +284,12 @@ const CustomerDatabase = () => {
     setNewEntry({
       partyCode: "",
       partyDescription: "",
-      partyType: "OEM",
+      partyType: partyTypes[0]?.name || "",
       items: [{ itemCode: "", itemDescription: "" }],
     });
   };
 
-  // --- 4. Upload Logic (Duplicate Check by Item Code) ---
+  // --- 5. Upload Logic ---
   const handleDragOver = (e) => {
     e.preventDefault();
     setIsDragging(true);
@@ -237,7 +379,7 @@ const CustomerDatabase = () => {
       const processed = rawData.slice(headerIdx + 1).map((row) => {
         let pType = idxPartyType !== -1 ? row[idxPartyType] : "";
         if (pType && typeof pType === "string") pType = pType.trim();
-        if (!pType || pType === "") pType = "End Customer";
+        if (!pType || pType === "") pType = partyTypes[0]?.name || "OEM";
 
         return {
           partyCode: idxPartyCode !== -1 ? row[idxPartyCode] : "",
@@ -260,7 +402,6 @@ const CustomerDatabase = () => {
     const issues = [];
     let validCount = 0;
 
-    // UPDATED: Check existing Item Codes, not Party Codes
     const existingItemCodes = new Set(data.map((d) => cleanStr(d.itemCode)));
     const fileItemCodes = new Set();
 
@@ -289,7 +430,6 @@ const CustomerDatabase = () => {
 
       const itemCodeClean = cleanStr(row.itemCode);
 
-      // Check Duplicates based on Item Code
       if (existingItemCodes.has(itemCodeClean)) {
         issues.push({
           id: `dup-db-${idx}`,
@@ -338,7 +478,7 @@ const CustomerDatabase = () => {
     }, 300);
   };
 
-  // --- 5. Selection Logic (Based on ITEM Code) ---
+  // --- 6. Selection Logic ---
   const handleSelectItem = (code) => {
     const newSelected = new Set(selectedItems);
     if (newSelected.has(code)) newSelected.delete(code);
@@ -350,7 +490,7 @@ const CustomerDatabase = () => {
     const newSelected = new Set(selectedItems);
     const allSelected = pageData.every((item) =>
       newSelected.has(item.itemCode),
-    ); // Use itemCode
+    );
     if (allSelected) {
       pageData.forEach((item) => newSelected.delete(item.itemCode));
     } else {
@@ -389,7 +529,7 @@ const CustomerDatabase = () => {
       const matchesSearch =
         String(item.partyCode).toLowerCase().includes(s) ||
         String(item.partyDescription).toLowerCase().includes(s) ||
-        String(item.itemCode).toLowerCase().includes(s); 
+        String(item.itemCode).toLowerCase().includes(s);
 
       const matchesType =
         filterType === "All" ||
@@ -408,6 +548,21 @@ const CustomerDatabase = () => {
   const isPageSelected =
     paginatedData.length > 0 &&
     paginatedData.every((item) => selectedItems.has(item.itemCode));
+
+  const getTypeColor = (typeName) => {
+    const index = partyTypes.findIndex((t) => t.name === typeName);
+    const colors = [
+      "bg-purple-100 text-purple-700",
+      "bg-orange-100 text-orange-700",
+      "bg-blue-100 text-blue-700",
+      "bg-green-100 text-green-700",
+      "bg-pink-100 text-pink-700",
+      "bg-indigo-100 text-indigo-700",
+      "bg-teal-100 text-teal-700",
+      "bg-red-100 text-red-700",
+    ];
+    return colors[index % colors.length] || "bg-gray-100 text-gray-700";
+  };
 
   return (
     <div className="w-full h-full font-sans text-[0.85vw]">
@@ -445,9 +600,19 @@ const CustomerDatabase = () => {
                 className="bg-transparent font-medium text-gray-700 border border-gray-300 p-[0.4vw] rounded-[0.3vw] outline-none cursor-pointer h-[2.4vw]"
               >
                 <option value="All">All Types</option>
-                <option value="OEM">OEM</option>
-                <option value="End customer">End Customer</option>
+                {partyTypes.map((type) => (
+                  <option key={type.id} value={type.name}>
+                    {type.name}
+                  </option>
+                ))}
               </select>
+              <button
+                onClick={() => setShowPartyTypeModal(true)}
+                className="cursor-pointer flex items-center gap-[0.5vw]  border border-blue-300 hover:bg-blue-100 text-blue-700 px-[1vw] h-[2.4vw] rounded-[0.4vw] shadow-sm transition-all"
+                title="Manage Party Types"
+              >
+                <Settings className="w-[1.2vw] h-[1.2vw]" /> Categories
+              </button>
               <button
                 onClick={() => setShowAddModal(true)}
                 className="cursor-pointer flex items-center gap-[0.5vw] bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-[1vw] h-[2.4vw] rounded-[0.4vw] shadow-sm transition-all"
@@ -500,7 +665,6 @@ const CustomerDatabase = () => {
                 <th className="p-[0.6vw] font-semibold text-gray-800 border-b border-r border-gray-200">
                   Item Desc
                 </th>
-
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -509,10 +673,6 @@ const CustomerDatabase = () => {
                   const serialNumber =
                     (currentPage - 1) * ITEMS_PER_PAGE + i + 1;
                   const isSelected = selectedItems.has(row.itemCode);
-                  const isOEM =
-                    String(row.partyType || "")
-                      .trim()
-                      .toUpperCase() === "OEM";
 
                   const prevRow = i > 0 ? paginatedData[i - 1] : null;
                   const isSameParty =
@@ -576,7 +736,7 @@ const CustomerDatabase = () => {
                           className="p-[0.9vw] border-r border-gray-200 bg-white align-center"
                         >
                           <span
-                            className={`px-2 py-1 rounded text-[0.7vw] font-medium ${isOEM ? "bg-purple-100 text-purple-700" : "bg-orange-100 text-orange-700"}`}
+                            className={`px-2 py-1 rounded text-[0.7vw] font-medium ${getTypeColor(row.partyType)}`}
                           >
                             {row.partyType}
                           </span>
@@ -593,14 +753,13 @@ const CustomerDatabase = () => {
                       >
                         {row.itemDescription}
                       </td>
-
                     </tr>
                   );
                 })
               ) : (
                 <tr>
                   <td
-                    colSpan="8"
+                    colSpan="7"
                     className="py-[4vw] text-center text-gray-400"
                   >
                     No data found.
@@ -665,7 +824,173 @@ const CustomerDatabase = () => {
         </div>
       </div>
 
-      {/* --- Updated Manual Add Modal (Multiple Items) --- */}
+      <AnimatePresence>
+        {showPartyTypeModal && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white w-[45vw] rounded-[0.8vw] shadow-2xl overflow-hidden max-h-[85vh] flex flex-col"
+            >
+              <div className="px-[1vw] py-[0.7vw] border-b border-gray-200 flex justify-between items-center bg-gradient-to-r from-purple-50 to-blue-50">
+                <h2 className="text-[1.2vw] font-semibold text-gray-900 flex items-center gap-[0.5vw]">
+                  Manage Party Type Categories
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowPartyTypeModal(false);
+                    setEditingType(null);
+                    setNewTypeName("");
+                  }}
+                  className="text-gray-400 hover:text-red-500 cursor-pointer"
+                >
+                  <X className="w-[1.2vw] h-[1.2vw]" />
+                </button>
+              </div>
+
+              <div className="p-[1.5vw] flex flex-col gap-[1.5vw] overflow-y-auto">
+                {/* Add New Type */}
+                <div className="bg-gradient-to-br from-blue-50 to-purple-50 p-[1vw] rounded-[0.6vw] border border-blue-200">
+                  <h3 className="text-[0.95vw] font-bold text-gray-700 mb-[0.8vw] flex items-center gap-[0.5vw]">
+                    Add New Category
+                  </h3>
+                  <div className="flex gap-[0.8vw]">
+                    <input
+                      type="text"
+                      value={newTypeName}
+                      onChange={(e) => setNewTypeName(e.target.value)}
+                      onKeyPress={(e) => {
+                        if (e.key === "Enter") handleAddPartyType();
+                      }}
+                      placeholder="Enter category name..."
+                      className="flex-1 border border-gray-300 rounded-[0.4vw] p-[0.6vw] focus:ring-2 ring-blue-200 outline-none"
+                    />
+                    <button
+                      onClick={handleAddPartyType}
+                      className="px-[1.5vw] py-[0.6vw] bg-blue-600 hover:bg-blue-700 text-white rounded-[0.4vw] cursor-pointer font-semibold flex items-center gap-[0.5vw] transition-all shadow-sm"
+                    >
+                      <Plus className="w-[1vw] h-[1vw]" />
+                      Add
+                    </button>
+                  </div>
+                </div>
+
+                {/* Existing Types List */}
+                <div className="bg-white border border-gray-200 rounded-[0.6vw] overflow-hidden">
+                  <div className="bg-gray-100 px-[1vw] py-[0.7vw] border-b border-gray-200">
+                    <h3 className="text-[0.9vw] font-bold text-gray-700">
+                      Existing Categories ({partyTypes.length})
+                    </h3>
+                  </div>
+                  <div className="max-h-[35vh] overflow-y-auto">
+                    {partyTypes.length > 0 ? (
+                      <div className="divide-y divide-gray-100">
+                        {partyTypes.map((type) => (
+                          <div
+                            key={type.id}
+                            className="p-[1vw] hover:bg-gray-50 transition-colors flex items-center justify-between group"
+                          >
+                            {editingType && editingType.id === type.id ? (
+                              <div className="flex-1 flex gap-[0.8vw] items-center">
+                                <input
+                                  type="text"
+                                  value={editingType.name}
+                                  onChange={(e) =>
+                                    setEditingType({
+                                      ...editingType,
+                                      name: e.target.value,
+                                    })
+                                  }
+                                  onKeyPress={(e) => {
+                                    if (e.key === "Enter") handleUpdatePartyType();
+                                  }}
+                                  className="flex-1 border border-blue-300 rounded-[0.4vw] p-[0.5vw] focus:ring-2 ring-blue-200 outline-none"
+                                  autoFocus
+                                />
+                                <button
+                                  onClick={handleUpdatePartyType}
+                                  className="p-[0.5vw] bg-green-600 hover:bg-green-700 text-white rounded-[0.3vw] cursor-pointer"
+                                  title="Save"
+                                >
+                                  <Check className="w-[1vw] h-[1vw]" />
+                                </button>
+                                <button
+                                  onClick={() => setEditingType(null)}
+                                  className="p-[0.5vw] bg-gray-300 hover:bg-gray-400 text-gray-700 rounded-[0.3vw] cursor-pointer"
+                                  title="Cancel"
+                                >
+                                  <X className="w-[1vw] h-[1vw]" />
+                                </button>
+                              </div>
+                            ) : (
+                              <>
+                                <div className="flex items-center gap-[0.8vw]">
+                                  <span
+                                    className={`px-3 py-1 rounded text-[0.8vw] font-medium ${getTypeColor(type.name)}`}
+                                  >
+                                    {type.name}
+                                  </span>
+                                  <span className="text-[0.75vw] text-gray-400">
+                                    ({data.filter((d) => d.partyType === type.name).length} records)
+                                  </span>
+                                </div>
+                                <div className="flex gap-[0.5vw] opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <button
+                                    onClick={() =>
+                                      setEditingType({ id: type.id, name: type.name })
+                                    }
+                                    className="p-[0.5vw] text-blue-600 hover:bg-blue-50 rounded-[0.3vw] cursor-pointer transition-colors"
+                                    title="Edit"
+                                  >
+                                    <Edit2 className="w-[1vw] h-[1vw]" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeletePartyType(type.id)}
+                                    className="p-[0.5vw] text-red-600 hover:bg-red-50 rounded-[0.3vw] cursor-pointer transition-colors"
+                                    title="Delete"
+                                  >
+                                    <Trash2 className="w-[1vw] h-[1vw]" />
+                                  </button>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="p-[2vw] text-center text-gray-400">
+                        No categories found. Add one above!
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="bg-yellow-50 border border-yellow-200 rounded-[0.5vw] p-[0.8vw]">
+                  <p className="text-[0.75vw] text-yellow-800">
+                    <strong>Note:</strong> When you rename a category, all existing records using that category will be automatically updated. Deleting a category will reassign affected records to the first available category.
+                  </p>
+                </div>
+              </div>
+
+              <div className="px-[1.5vw] py-[1vw] border-t border-gray-200 bg-gray-50 flex justify-end">
+                <button
+                  onClick={() => {
+                    setShowPartyTypeModal(false);
+                    setEditingType(null);
+                    setNewTypeName("");
+                  }}
+                  className="px-[2vw] py-[0.6vw] bg-blue-600 hover:bg-blue-700 text-white rounded-[0.4vw] cursor-pointer font-semibold"
+                >
+                  Done
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Manual Add Modal */}
       <AnimatePresence>
         {showAddModal && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center">
@@ -691,7 +1016,6 @@ const CustomerDatabase = () => {
                 onSubmit={handleManualSubmit}
                 className="p-[1vw] flex flex-col gap-[1vw] overflow-y-auto"
               >
-                {/* Party Details (Fixed) */}
                 <div className="bg-gray-50 p-[1vw] rounded-[0.5vw] border border-gray-200">
                   <h3 className="text-[0.9vw] font-bold text-gray-700 mb-[0.5vw]">
                     Party Details
@@ -728,8 +1052,11 @@ const CustomerDatabase = () => {
                         }
                         className="border p-[0.6vw] rounded-[0.4vw] bg-white outline-none"
                       >
-                        <option>OEM</option>
-                        <option>End customer</option>
+                        {partyTypes.map((type) => (
+                          <option key={type.id} value={type.name}>
+                            {type.name}
+                          </option>
+                        ))}
                       </select>
                     </div>
                   </div>
@@ -752,7 +1079,6 @@ const CustomerDatabase = () => {
                   </div>
                 </div>
 
-                {/* Items List (Dynamic) */}
                 <div className="bg-white border border-gray-200 rounded-[0.5vw] p-[1vw]">
                   <div className="flex justify-between items-center mb-[0.5vw]">
                     <h3 className="text-[0.9vw] font-bold text-gray-700">
@@ -814,7 +1140,7 @@ const CustomerDatabase = () => {
                             type="button"
                             onClick={() => handleRemoveItemRow(idx)}
                             disabled={newEntry.items.length === 1}
-                            className={`text-red-400 hover:text-red-600 disabled:opacity-30 cursor-pointer ${idx === 0 ? 'mt-[1.3vw]':''}`}
+                            className={`text-red-400 hover:text-red-600 disabled:opacity-30 cursor-pointer ${idx === 0 ? "mt-[1.3vw]" : ""}`}
                           >
                             <MinusCircle className="w-[1.2vw] h-[1.2vw]" />
                           </button>
@@ -845,6 +1171,7 @@ const CustomerDatabase = () => {
         )}
       </AnimatePresence>
 
+      {/* Upload Modal - Same as before, no changes needed */}
       <AnimatePresence>
         {showUploadModal && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center">
@@ -894,12 +1221,15 @@ const CustomerDatabase = () => {
                     <p className="text-gray-700 text-[0.95vw] mb-[0.7vw]">
                       Format : xlsx{" "}
                     </p>
-                     <p className="text-gray-700 text-[0.95vw] mb-[0.5vw]">
-                      <span className="font-semibold">Expected Format : </span>Party Code, Party Description,
-                      Party type, Item Code, Item Description
+                    <p className="text-gray-700 text-[0.95vw] mb-[0.5vw]">
+                      <span className="font-semibold">Expected Format : </span>
+                      Party Code, Party Description, Party type, Item Code,
+                      Item Description
                     </p>
                     <p className="text-blue-600 text-[0.85vw] bg-blue-50 px-[1vw] py-[0.4vw] rounded-[0.3vw] border border-blue-200">
-                      <span className="font-semibold">Note:</span> If a customer has multiple items, add each item in a new row with the same Party Code and Description
+                      <span className="font-semibold">Note:</span> If a
+                      customer has multiple items, add each item in a new row
+                      with the same Party Code and Description
                     </p>
                   </div>
                 )}

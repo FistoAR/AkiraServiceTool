@@ -23,17 +23,18 @@ import {
 
 const CUSTOMER_DB_KEY = "customer_db_grouped_v4";
 const SERVICE_CALLS_KEY = "service_calls_v1";
+const PARTY_TYPES_KEY = "party_types_v1"; // Added for dynamic party types
 
 const MODES = ["Phone", "Email", "WhatsApp", "Portal"];
 const PRIORITIES = ["Low", "Medium", "High", "Critical"];
 const CATEGORIES = ["Phone Support", "Field Visit", "In-house Repair"];
-const CUSTOMER_TYPES = ["OEM", "B2C"];
 const WARRANTY_STATUS = ["In Warranty", "Out of Warranty"];
 
 const ServiceCallEntry = () => {
   // --- Master Data State (from LocalStorage) ---
   const [customerDb, setCustomerDb] = useState([]);
   const [serviceCalls, setServiceCalls] = useState([]);
+  const [partyTypes, setPartyTypes] = useState([]); // Added for dynamic party types
 
   // --- Form State ---
   const [formData, setFormData] = useState({
@@ -42,7 +43,7 @@ const ServiceCallEntry = () => {
     mode: "Phone",
     priority: "Medium",
     category: "Phone Support",
-    customerType: "OEM",
+    customerType: "",
     partyCode: "",
     customerName: "",
     contactPerson: "",
@@ -77,16 +78,48 @@ const ServiceCallEntry = () => {
   const [customerHistory, setCustomerHistory] = useState([]);
 
   // --- Add Customer Modal State ---
-  const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
   const [newCustomer, setNewCustomer] = useState({
     partyCode: "",
     partyDescription: "",
-    partyType: "OEM",
+    partyType: "",
     items: [{ itemCode: "", itemDescription: "" }],
   });
 
+  const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
+
   // --- 1. Initialization & Auto-Generation ---
   useEffect(() => {
+    // Load Party Types
+    const storedTypes = localStorage.getItem(PARTY_TYPES_KEY);
+    if (storedTypes) {
+      try {
+        const types = JSON.parse(storedTypes);
+        setPartyTypes(types);
+        // Set default customer type if not set
+        if (types.length > 0 && !formData.customerType) {
+          setFormData(prev => ({ ...prev, customerType: types[0].name }));
+        }
+      } catch (e) {
+        console.error("Error loading party types", e);
+        // Set default types if error
+        const defaultTypes = [
+          { id: 1, name: "OEM" },
+          { id: 2, name: "End Customer" },
+        ];
+        setPartyTypes(defaultTypes);
+        setFormData(prev => ({ ...prev, customerType: defaultTypes[0].name }));
+      }
+    } else {
+      // Initialize with default types
+      const defaultTypes = [
+        { id: 1, name: "OEM" },
+        { id: 2, name: "End Customer" },
+      ];
+      setPartyTypes(defaultTypes);
+      localStorage.setItem(PARTY_TYPES_KEY, JSON.stringify(defaultTypes));
+      setFormData(prev => ({ ...prev, customerType: defaultTypes[0].name }));
+    }
+
     // Load Customer DB
     const storedDb = localStorage.getItem(CUSTOMER_DB_KEY);
     if (storedDb) {
@@ -121,6 +154,13 @@ const ServiceCallEntry = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // Update newCustomer default type when party types load
+  useEffect(() => {
+    if (partyTypes.length > 0 && !newCustomer.partyType) {
+      setNewCustomer(prev => ({ ...prev, partyType: partyTypes[0].name }));
+    }
+  }, [partyTypes]);
+
   const initializeForm = () => {
     const now = new Date();
     const dateStr = now.toISOString().slice(0, 10).replace(/-/g, "");
@@ -138,15 +178,12 @@ const ServiceCallEntry = () => {
 
   // --- 2. Derived Data for Search ---
 
-  // Filter customers by type (OEM vs B2C)
+  // Filter customers by type using exact match
   const filteredCustomersByType = useMemo(() => {
     const map = new Map();
     customerDb.forEach((item) => {
-      // Match customer type: OEM or End customer (B2C)
-      const itemType = item.partyType?.toLowerCase().includes("oem")
-        ? "OEM"
-        : "B2C";
-      if (itemType === formData.customerType) {
+      // Exact match on party type
+      if (item.partyType === formData.customerType) {
         if (!map.has(item.partyCode)) {
           map.set(item.partyCode, {
             code: item.partyCode,
@@ -243,13 +280,14 @@ const ServiceCallEntry = () => {
   };
 
   const resetForm = () => {
+    const defaultType = partyTypes.length > 0 ? partyTypes[0].name : "";
     setFormData({
       callNumber: "",
       dateTime: "",
       mode: "Phone",
       priority: "Medium",
       category: "Phone Support",
-      customerType: "OEM",
+      customerType: defaultType,
       partyCode: "",
       customerName: "",
       contactPerson: "",
@@ -289,6 +327,22 @@ const ServiceCallEntry = () => {
       default:
         return "text-gray-600 bg-gray-50";
     }
+  };
+
+  // Get color for party type badge
+  const getTypeColor = (typeName) => {
+    const index = partyTypes.findIndex((t) => t.name === typeName);
+    const colors = [
+      "bg-purple-100 text-purple-700",
+      "bg-orange-100 text-orange-700",
+      "bg-blue-100 text-blue-700",
+      "bg-green-100 text-green-700",
+      "bg-pink-100 text-pink-700",
+      "bg-indigo-100 text-indigo-700",
+      "bg-teal-100 text-teal-700",
+      "bg-red-100 text-red-700",
+    ];
+    return colors[index % colors.length] || "bg-gray-100 text-gray-700";
   };
 
   // --- Add Customer Modal Functions ---
@@ -361,7 +415,7 @@ const ServiceCallEntry = () => {
     setNewCustomer({
       partyCode: "",
       partyDescription: "",
-      partyType: "OEM",
+      partyType: partyTypes.length > 0 ? partyTypes[0].name : "",
       items: [{ itemCode: "", itemDescription: "" }],
     });
   };
@@ -371,7 +425,7 @@ const ServiceCallEntry = () => {
     setNewCustomer({
       partyCode: "",
       partyDescription: formData.customerName || "",
-      partyType: formData.customerType === "OEM" ? "OEM" : "End customer",
+      partyType: formData.customerType || (partyTypes.length > 0 ? partyTypes[0].name : ""),
       items: [{ itemCode: "", itemDescription: "" }],
     });
     setShowAddCustomerModal(true);
@@ -502,9 +556,9 @@ const ServiceCallEntry = () => {
                 }}
                 className="border border-gray-300 rounded-[0.4vw] p-[0.6vw] bg-white outline-none"
               >
-                {CUSTOMER_TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
+                {partyTypes.map((type) => (
+                  <option key={type.id} value={type.name}>
+                    {type.name}
                   </option>
                 ))}
               </select>
@@ -515,9 +569,7 @@ const ServiceCallEntry = () => {
               ref={custInputRef}
             >
               <label className="font-semibold text-gray-600 flex justify-between">
-                {formData.customerType === "OEM"
-                  ? "OEM Customer Name"
-                  : "End Customer Name"}
+                Customer Name ({formData.customerType})
                 <span className="text-[0.7vw] text-gray-400 font-normal">
                   ({filteredCustomersByType.length} available)
                 </span>
@@ -572,7 +624,7 @@ const ServiceCallEntry = () => {
                           </span>
                         </div>
                         <span
-                          className={`text-[0.7vw] px-[0.5vw] py-[0.2vw] rounded-[0.3vw] ${cust.type?.toLowerCase().includes("oem") ? "bg-purple-100 text-purple-700" : "bg-orange-100 text-orange-700"}`}
+                          className={`text-[0.7vw] px-[0.5vw] py-[0.2vw] rounded-[0.3vw] ${getTypeColor(cust.type)}`}
                         >
                           {cust.type}
                         </span>
@@ -1114,8 +1166,11 @@ const ServiceCallEntry = () => {
                       }
                       className="border p-[0.6vw] rounded-[0.4vw] bg-white outline-none"
                     >
-                      <option>OEM</option>
-                      <option>End customer</option>
+                      {partyTypes.map((type) => (
+                        <option key={type.id} value={type.name}>
+                          {type.name}
+                        </option>
+                      ))}
                     </select>
                   </div>
                 </div>
