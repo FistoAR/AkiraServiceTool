@@ -651,19 +651,20 @@ const CustomerDatabase = () => {
                   S.No
                 </th>
                 <th className="p-[0.6vw] font-semibold text-gray-800 border-b border-r border-gray-200">
+                  Party Type
+                </th>
+                <th className="p-[0.6vw] font-semibold text-gray-800 border-b border-r border-gray-200">
                   Party Code
                 </th>
                 <th className="p-[0.6vw] font-semibold text-gray-800 border-b border-r border-gray-200">
-                  Description
+                  Party Description 
                 </th>
-                <th className="p-[0.6vw] font-semibold text-gray-800 border-b border-r border-gray-200">
-                  Type
-                </th>
+                
                 <th className="p-[0.6vw] font-semibold text-gray-800 border-b border-r border-gray-200">
                   Item Code
                 </th>
                 <th className="p-[0.6vw] font-semibold text-gray-800 border-b border-r border-gray-200">
-                  Item Desc
+                  Item Description
                 </th>
               </tr>
             </thead>
@@ -711,6 +712,19 @@ const CustomerDatabase = () => {
                         {serialNumber}
                       </td>
 
+                         {!isSameParty && (
+                        <td
+                          rowSpan={rowSpan}
+                          className="p-[0.9vw] border-r border-gray-200 bg-white align-center"
+                        >
+                          <span
+                            className={`px-2 py-1 rounded text-[0.7vw] font-medium ${getTypeColor(row.partyType)}`}
+                          >
+                            {row.partyType}
+                          </span>
+                        </td>
+                      )}
+
                       {!isSameParty && (
                         <td
                           rowSpan={rowSpan}
@@ -730,18 +744,7 @@ const CustomerDatabase = () => {
                         </td>
                       )}
 
-                      {!isSameParty && (
-                        <td
-                          rowSpan={rowSpan}
-                          className="p-[0.9vw] border-r border-gray-200 bg-white align-center"
-                        >
-                          <span
-                            className={`px-2 py-1 rounded text-[0.7vw] font-medium ${getTypeColor(row.partyType)}`}
-                          >
-                            {row.partyType}
-                          </span>
-                        </td>
-                      )}
+                   
 
                       <td className="p-[0.9vw] text-gray-700 font-mono border-r border-gray-200">
                         {row.itemCode}
@@ -850,7 +853,6 @@ const CustomerDatabase = () => {
               </div>
 
               <div className="p-[1.5vw] flex flex-col gap-[1.5vw] overflow-y-auto">
-                {/* Add New Type */}
                 <div className="bg-gradient-to-br from-blue-50 to-purple-50 p-[1vw] rounded-[0.6vw] border border-blue-200">
                   <h3 className="text-[0.95vw] font-bold text-gray-700 mb-[0.8vw] flex items-center gap-[0.5vw]">
                     Add New Category
