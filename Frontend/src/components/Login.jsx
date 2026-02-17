@@ -3,24 +3,77 @@ import { useNavigate } from "react-router-dom";
 import { Shield, Eye, EyeOff, User } from "lucide-react";
 import logo from "../../public/Akira_logo.webp";
 
+const defaultEmployees = [
+  {
+    name: "Arun Kumar",
+    userId: "Fisto1",
+    password: "1234",
+    department: "Support Engineer",
+  },
+  {
+    name: "Priya Sharma",
+    userId: "Fisto2",
+    password: "1234",
+    department: "Support Engineer",
+  },
+  {
+    name: "Rajesh Verma",
+    userId: "Fisto3",
+    password: "1234",
+    department: "Support Engineer",
+  },
+  {
+    name: "Sneha Reddy",
+    userId: "Fisto4",
+    password: "1234",
+    department: "Service Engineer",
+  },
+  {
+    name: "Vikram Singh",
+    userId: "Fisto5",
+    password: "1234",
+    department: "Service Engineer",
+  },
+  {
+    name: "Deepa Nair",
+    userId: "Fisto6",
+    password: "1234",
+    department: "Service Engineer",
+  },
+  {
+    name: "Karthik Raj",
+    userId: "Fisto7",
+    password: "1234",
+    department: "R&D",
+  },
+  { name: "Meena Iyer", userId: "Fisto8", password: "1234", department: "R&D" },
+  { name: "Sham", userId: "Fisto", password: "1234", department: "Admin" },
+];
+
 const LoginPage = () => {
   const navigate = useNavigate();
   const [mounted, setMounted] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState("");
   const [formData, setFormData] = useState({
     emailOrUsername: "",
     password: "",
     rememberMe: false,
   });
 
+  // Seed default employees into localStorage on first load
   useEffect(() => {
+    const existing = localStorage.getItem("employees");
+    if (!existing) {
+      localStorage.setItem("employees", JSON.stringify(defaultEmployees));
+    }
     setMounted(true);
   }, []);
 
   useEffect(() => {
     if (mounted) {
       const emailInput = document.querySelector(
-        'input[name="emailOrUsername"]'
+        'input[name="emailOrUsername"]',
       );
       if (emailInput) {
         setTimeout(() => emailInput.focus(), 100);
@@ -30,6 +83,7 @@ const LoginPage = () => {
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
+    setError("");
     setFormData((prev) => ({
       ...prev,
       [name]: type === "checkbox" ? checked : value,
@@ -38,8 +92,54 @@ const LoginPage = () => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    navigate("/dashboard");
+    setError("");
+
+    const { emailOrUsername, password } = formData;
+
+    if (!emailOrUsername.trim() || !password.trim()) {
+      setError("Please fill in all fields.");
+      return;
+    }
+
+    const employees = JSON.parse(localStorage.getItem("employees")) || [];
+
+    const matchedUser = employees.find(
+      (emp) =>
+        emp.userId.toLowerCase() === emailOrUsername.trim().toLowerCase() &&
+        emp.password === password,
+    );
+
+    if (matchedUser) {
+      sessionStorage.setItem(
+        "loggedInUser",
+        JSON.stringify({
+          name: matchedUser.name,
+          userId: matchedUser.userId,
+          department: matchedUser.department,
+        }),
+      );
+      if (formData.rememberMe) {
+        sessionStorage.setItem("rememberedUser", matchedUser.userId);
+      } else {
+        sessionStorage.removeItem("rememberedUser");
+      }
+      navigate("/dashboard");
+    } else {
+      setError("Invalid User ID or Password. Please try again.");
+    }
   };
+
+  // Auto-fill remembered user
+  useEffect(() => {
+    const remembered = sessionStorage.getItem("rememberedUser");
+    if (remembered) {
+      setFormData((prev) => ({
+        ...prev,
+        emailOrUsername: remembered,
+        rememberMe: true,
+      }));
+    }
+  }, []);
 
   return (
     <div className="w-full h-screen flex items-center justify-center bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 relative overflow-hidden text-gray-700">
@@ -79,6 +179,14 @@ const LoginPage = () => {
               </p>
             </div>
 
+            {/* Error Message */}
+            {error && (
+              <div className="mb-[0.8vw] px-[1vw] py-[0.5vw] bg-red-50 border border-red-300 rounded-lg flex items-center gap-[0.5vw]">
+                <div className="w-[0.5vw] h-[0.5vw] bg-red-500 rounded-full flex-shrink-0"></div>
+                <p className="text-red-600 text-[0.85vw]">{error}</p>
+              </div>
+            )}
+
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="relative group">
                 <label className="block text-[0.9vw] font-medium text-gray-700 mb-[0.6vw]">
@@ -95,7 +203,7 @@ const LoginPage = () => {
                     value={formData.emailOrUsername}
                     onChange={handleInputChange}
                     className="w-full pl-[2.2vw] text-[0.9vw] pr-[1vw] py-[0.6vw] border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 bg-white bg-opacity-50 backdrop-blur-sm hover:bg-opacity-70 focus:bg-opacity-90 placeholder:text-[0.85vw]"
-                    placeholder="Enter your Emp ID or Email"
+                    placeholder="Enter your Emp ID (e.g., Fisto1)"
                   />
                 </div>
               </div>
@@ -159,6 +267,18 @@ const LoginPage = () => {
                 Sign In
               </button>
             </form>
+
+            {/* Demo Credentials Hint */}
+            <div className="mt-[1vw] p-[0.8vw] bg-blue-50 rounded-lg border border-blue-200">
+              <p className="text-[0.75vw] text-blue-700 font-semibold mb-[0.3vw]">
+                Demo Credentials:
+              </p>
+              <p className="text-[0.7vw] text-blue-600">
+                User IDs: <span className="font-mono">Fisto1</span> –{" "}
+                <span className="font-mono">Fisto8</span> &nbsp;|&nbsp;
+                Password: <span className="font-mono">1234</span>
+              </p>
+            </div>
           </div>
         </div>
       </div>

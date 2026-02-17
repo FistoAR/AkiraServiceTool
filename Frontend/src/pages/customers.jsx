@@ -24,34 +24,27 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
-const STORAGE_KEY = "customer_db_grouped_v4";
+const STORAGE_KEY = "customer_db_grouped_v5";
 const PARTY_TYPES_KEY = "party_types_v1";
 const ITEMS_PER_PAGE = 10;
 
 const CustomerDatabase = () => {
-  // --- Data State ---
   const [data, setData] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState("All");
 
-  // --- Party Types Management ---
   const [partyTypes, setPartyTypes] = useState([]);
   const [showPartyTypeModal, setShowPartyTypeModal] = useState(false);
-  const [editingType, setEditingType] = useState(null); // {id, name}
+  const [editingType, setEditingType] = useState(null);
   const [newTypeName, setNewTypeName] = useState("");
 
-  // --- Selection State ---
   const [selectedItems, setSelectedItems] = useState(new Set());
-
-  // --- Pagination State ---
   const [currentPage, setCurrentPage] = useState(1);
 
-  // --- UI State ---
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
 
-  // --- Upload Logic State ---
   const [uploadStep, setUploadStep] = useState(1);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [validationResult, setValidationResult] = useState({
@@ -63,59 +56,56 @@ const CustomerDatabase = () => {
     issues: [],
   });
 
-  // --- Manual Add Form State ---
   const [newEntry, setNewEntry] = useState({
     partyCode: "",
     partyDescription: "",
     partyType: "",
-    items: [{ itemCode: "", itemDescription: "" }],
+    state: "",
+    districtCity: "",
+    items: [
+      {
+        productSegment: "",
+        itemCode: "",
+        itemDescription: "",
+        warrantyPeriodDays: "",
+      },
+    ],
   });
 
   const fileInputRef = useRef(null);
 
-  // --- 1. Load & Save ---
   useEffect(() => {
-    // Load Party Types
     const storedTypes = localStorage.getItem(PARTY_TYPES_KEY);
     if (storedTypes) {
       try {
         setPartyTypes(JSON.parse(storedTypes));
-      } catch (e) {
-        console.error("Error loading party types", e);
-        // Set default types if error
-        const defaultTypes = [
+      } catch {
+        const def = [
           { id: 1, name: "OEM" },
           { id: 2, name: "End Customer" },
         ];
-        setPartyTypes(defaultTypes);
-        localStorage.setItem(PARTY_TYPES_KEY, JSON.stringify(defaultTypes));
+        setPartyTypes(def);
+        localStorage.setItem(PARTY_TYPES_KEY, JSON.stringify(def));
       }
     } else {
-      // Initialize with default types
-      const defaultTypes = [
+      const def = [
         { id: 1, name: "OEM" },
         { id: 2, name: "End Customer" },
       ];
-      setPartyTypes(defaultTypes);
-      localStorage.setItem(PARTY_TYPES_KEY, JSON.stringify(defaultTypes));
+      setPartyTypes(def);
+      localStorage.setItem(PARTY_TYPES_KEY, JSON.stringify(def));
     }
-
-    // Load Customer DB
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
-        const sorted = parsed.sort((a, b) =>
-          a.partyCode.localeCompare(b.partyCode),
-        );
-        setData(sorted);
-      } catch (e) {
-        console.error("Error loading DB", e);
+        setData(parsed.sort((a, b) => a.partyCode.localeCompare(b.partyCode)));
+      } catch {
+        console.error("Error loading DB");
       }
     }
   }, []);
 
-  // Set default party type when types load
   useEffect(() => {
     if (partyTypes.length > 0 && !newEntry.partyType) {
       setNewEntry((prev) => ({ ...prev, partyType: partyTypes[0].name }));
@@ -123,11 +113,11 @@ const CustomerDatabase = () => {
   }, [partyTypes]);
 
   const saveToStorage = (newData) => {
-    const sortedData = [...newData].sort((a, b) =>
+    const sorted = [...newData].sort((a, b) =>
       a.partyCode.localeCompare(b.partyCode),
     );
-    setData(sortedData);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(sortedData));
+    setData(sorted);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(sorted));
   };
 
   const savePartyTypes = (types) => {
@@ -135,31 +125,29 @@ const CustomerDatabase = () => {
     localStorage.setItem(PARTY_TYPES_KEY, JSON.stringify(types));
   };
 
-  // --- 2. Helpers ---
   const cleanStr = (str) =>
     String(str || "")
       .toLowerCase()
       .replace(/[^a-z0-9]/g, "");
 
-  // --- 3. Party Type Management Functions ---
+  // ── Party Type Management ──────────────────────────────────────────────────
   const handleAddPartyType = () => {
     if (!newTypeName.trim()) {
       alert("Please enter a party type name");
       return;
     }
-
-    // Check for duplicates
-    if (partyTypes.some((t) => t.name.toLowerCase() === newTypeName.trim().toLowerCase())) {
+    if (
+      partyTypes.some(
+        (t) => t.name.toLowerCase() === newTypeName.trim().toLowerCase(),
+      )
+    ) {
       alert("This party type already exists!");
       return;
     }
-
-    const newType = {
-      id: Date.now(),
-      name: newTypeName.trim(),
-    };
-
-    savePartyTypes([...partyTypes, newType]);
+    savePartyTypes([
+      ...partyTypes,
+      { id: Date.now(), name: newTypeName.trim() },
+    ]);
     setNewTypeName("");
   };
 
@@ -168,105 +156,102 @@ const CustomerDatabase = () => {
       alert("Please enter a valid name");
       return;
     }
-
-    // Check for duplicates (excluding current)
     if (
       partyTypes.some(
         (t) =>
           t.id !== editingType.id &&
-          t.name.toLowerCase() === editingType.name.trim().toLowerCase()
+          t.name.toLowerCase() === editingType.name.trim().toLowerCase(),
       )
     ) {
       alert("This party type already exists!");
       return;
     }
-
     const oldName = partyTypes.find((t) => t.id === editingType.id)?.name;
     const newName = editingType.name.trim();
-
-    // Update in party types list
     const updatedTypes = partyTypes.map((t) =>
-      t.id === editingType.id ? { ...t, name: newName } : t
+      t.id === editingType.id ? { ...t, name: newName } : t,
     );
     savePartyTypes(updatedTypes);
-
-    // Update all data entries with the old name
     if (oldName !== newName) {
-      const updatedData = data.map((row) =>
-        row.partyType === oldName ? { ...row, partyType: newName } : row
+      saveToStorage(
+        data.map((row) =>
+          row.partyType === oldName ? { ...row, partyType: newName } : row,
+        ),
       );
-      saveToStorage(updatedData);
     }
-
     setEditingType(null);
   };
 
   const handleDeletePartyType = (typeId) => {
     const typeToDelete = partyTypes.find((t) => t.id === typeId);
-    
     if (partyTypes.length === 1) {
-      alert("Cannot delete the last party type! At least one type must exist.");
+      alert("Cannot delete the last party type!");
       return;
     }
-
-    // Check if any data uses this type
-    const usageCount = data.filter((row) => row.partyType === typeToDelete.name).length;
-    
+    const usageCount = data.filter(
+      (row) => row.partyType === typeToDelete.name,
+    ).length;
+    if (
+      usageCount > 0 &&
+      !confirm(
+        `This party type is used in ${usageCount} records. Delete anyway?`,
+      )
+    )
+      return;
+    if (!confirm(`Delete party type "${typeToDelete.name}"?`)) return;
+    const updatedTypes = partyTypes.filter((t) => t.id !== typeId);
+    savePartyTypes(updatedTypes);
     if (usageCount > 0) {
-      if (!confirm(`This party type is used in ${usageCount} records. Are you sure you want to delete it? Those records will need to be reassigned.`)) {
-        return;
-      }
-    }
-
-    if (confirm(`Delete party type "${typeToDelete.name}"?`)) {
-      const updatedTypes = partyTypes.filter((t) => t.id !== typeId);
-      savePartyTypes(updatedTypes);
-
-      // Update data entries - set to first remaining type
-      if (usageCount > 0) {
-        const newDefaultType = updatedTypes[0].name;
-        const updatedData = data.map((row) =>
+      saveToStorage(
+        data.map((row) =>
           row.partyType === typeToDelete.name
-            ? { ...row, partyType: newDefaultType }
-            : row
-        );
-        saveToStorage(updatedData);
-      }
+            ? { ...row, partyType: updatedTypes[0].name }
+            : row,
+        ),
+      );
     }
   };
 
-  // --- 4. Manual Add Logic (Multiple Items) ---
+  // ── Manual Add (Multiple Items) ────────────────────────────────────────────
   const handleAddItemRow = () => {
     setNewEntry({
       ...newEntry,
-      items: [...newEntry.items, { itemCode: "", itemDescription: "" }],
+      items: [
+        ...newEntry.items,
+        {
+          productSegment: "",
+          itemCode: "",
+          itemDescription: "",
+          warrantyPeriodDays: "",
+        },
+      ],
     });
   };
 
   const handleRemoveItemRow = (index) => {
     if (newEntry.items.length === 1) return;
-    const updatedItems = newEntry.items.filter((_, i) => i !== index);
-    setNewEntry({ ...newEntry, items: updatedItems });
+    setNewEntry({
+      ...newEntry,
+      items: newEntry.items.filter((_, i) => i !== index),
+    });
   };
 
   const handleItemChange = (index, field, value) => {
-    const updatedItems = newEntry.items.map((item, i) =>
-      i === index ? { ...item, [field]: value } : item,
-    );
-    setNewEntry({ ...newEntry, items: updatedItems });
+    setNewEntry({
+      ...newEntry,
+      items: newEntry.items.map((item, i) =>
+        i === index ? { ...item, [field]: value } : item,
+      ),
+    });
   };
 
   const handleManualSubmit = (e) => {
     e.preventDefault();
-
     const duplicateItems = newEntry.items.filter((newItem) =>
       data.some((d) => cleanStr(d.itemCode) === cleanStr(newItem.itemCode)),
     );
-
     if (duplicateItems.length > 0) {
-      alert(
-        `Item Code "${duplicateItems[0].itemCode}" already exists in the database!`,
-      );
+      alert(`Item Code "${duplicateItems[0].itemCode}" already exists!`);
       return;
     }
 
@@ -274,22 +259,34 @@ const CustomerDatabase = () => {
       partyCode: newEntry.partyCode,
       partyDescription: newEntry.partyDescription,
       partyType: newEntry.partyType,
+      state: newEntry.state,
+      districtCity: newEntry.districtCity,
+      productSegment: item.productSegment,
       itemCode: item.itemCode,
       itemDescription: item.itemDescription,
+      warrantyPeriodDays: item.warrantyPeriodDays,
     }));
 
-    const newData = [...newRows, ...data];
-    saveToStorage(newData);
+    saveToStorage([...newRows, ...data]);
     setShowAddModal(false);
     setNewEntry({
       partyCode: "",
       partyDescription: "",
       partyType: partyTypes[0]?.name || "",
-      items: [{ itemCode: "", itemDescription: "" }],
+      state: "",
+      districtCity: "",
+      items: [
+        {
+          productSegment: "",
+          itemCode: "",
+          itemDescription: "",
+          warrantyPeriodDays: "",
+        },
+      ],
     });
   };
 
-  // --- 5. Upload Logic ---
+  // ── Upload Logic ───────────────────────────────────────────────────────────
   const handleDragOver = (e) => {
     e.preventDefault();
     setIsDragging(true);
@@ -302,11 +299,9 @@ const CustomerDatabase = () => {
     e.preventDefault();
     setIsDragging(false);
     const file = e.dataTransfer.files[0];
-    if (file && (file.name.endsWith(".xlsx") || file.name.endsWith(".xls"))) {
+    if (file && (file.name.endsWith(".xlsx") || file.name.endsWith(".xls")))
       startUpload(file);
-    } else {
-      alert("Please drop a valid Excel file");
-    }
+    else alert("Please drop a valid Excel file");
   };
   const handleFileSelect = (e) => {
     const file = e.target.files[0];
@@ -332,8 +327,7 @@ const CustomerDatabase = () => {
   const processFile = (file) => {
     const reader = new FileReader();
     reader.onload = (evt) => {
-      const bstr = evt.target.result;
-      const wb = XLSX.read(bstr, { type: "binary" });
+      const wb = XLSX.read(evt.target.result, { type: "binary" });
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rawData = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
 
@@ -350,7 +344,6 @@ const CustomerDatabase = () => {
           break;
         }
       }
-
       if (headerIdx === -1) {
         alert("Could not find 'Party Code' column.");
         setUploadStep(1);
@@ -373,20 +366,37 @@ const CustomerDatabase = () => {
           : getColIndex(["party", "name"]);
       let idxPartyType = getColIndex(["party", "type"]);
       if (idxPartyType === -1) idxPartyType = getColIndex(["type"]);
+      const idxProductSegment = getColIndex(["product", "segment"]);
       const idxItemCode = getColIndex(["item", "code"]);
       const idxItemDesc = getColIndex(["item", "desc"]);
+      const idxWarrantyPeriod = getColIndex(["warranty", "period"]);
+      // ── NEW: State and District/City ──
+      const idxState = getColIndex(["state"]);
+      const idxDistrictCity =
+        getColIndex(["district"]) !== -1
+          ? getColIndex(["district"])
+          : getColIndex(["city"]);
 
       const processed = rawData.slice(headerIdx + 1).map((row) => {
         let pType = idxPartyType !== -1 ? row[idxPartyType] : "";
         if (pType && typeof pType === "string") pType = pType.trim();
-        if (!pType || pType === "") pType = partyTypes[0]?.name || "OEM";
+        if (!pType) pType = partyTypes[0]?.name || "OEM";
 
         return {
-          partyCode: idxPartyCode !== -1 ? row[idxPartyCode] : "",
-          partyDescription: idxPartyDesc !== -1 ? row[idxPartyDesc] : "",
+          partyCode:
+            idxPartyCode !== -1 ? String(row[idxPartyCode]).trim() : "",
+          partyDescription:
+            idxPartyDesc !== -1 ? String(row[idxPartyDesc]).trim() : "",
           partyType: pType,
+          state: idxState !== -1 ? String(row[idxState]).trim() : "",
+          districtCity:
+            idxDistrictCity !== -1 ? String(row[idxDistrictCity]).trim() : "",
+          productSegment:
+            idxProductSegment !== -1 ? row[idxProductSegment] : "",
           itemCode: idxItemCode !== -1 ? row[idxItemCode] : "",
           itemDescription: idxItemDesc !== -1 ? row[idxItemDesc] : "",
+          warrantyPeriodDays:
+            idxWarrantyPeriod !== -1 ? row[idxWarrantyPeriod] : "",
         };
       });
 
@@ -398,17 +408,15 @@ const CustomerDatabase = () => {
   };
 
   const validateData = (rows) => {
-    const validRows = [];
-    const issues = [];
+    const validRows = [],
+      issues = [];
     let validCount = 0;
-
     const existingItemCodes = new Set(data.map((d) => cleanStr(d.itemCode)));
     const fileItemCodes = new Set();
 
     rows.forEach((row, idx) => {
       if (!row.partyCode && !row.partyDescription && !row.itemCode) return;
       const rowNum = idx + 2;
-
       if (!row.partyCode) {
         issues.push({
           id: `err-p-${idx}`,
@@ -427,10 +435,8 @@ const CustomerDatabase = () => {
         });
         return;
       }
-
-      const itemCodeClean = cleanStr(row.itemCode);
-
-      if (existingItemCodes.has(itemCodeClean)) {
+      const clean = cleanStr(row.itemCode);
+      if (existingItemCodes.has(clean)) {
         issues.push({
           id: `dup-db-${idx}`,
           row: rowNum,
@@ -439,7 +445,7 @@ const CustomerDatabase = () => {
         });
         return;
       }
-      if (fileItemCodes.has(itemCodeClean)) {
+      if (fileItemCodes.has(clean)) {
         issues.push({
           id: `dup-file-${idx}`,
           row: rowNum,
@@ -448,8 +454,7 @@ const CustomerDatabase = () => {
         });
         return;
       }
-
-      fileItemCodes.add(itemCodeClean);
+      fileItemCodes.add(clean);
       validCount++;
       validRows.push(row);
     });
@@ -478,44 +483,34 @@ const CustomerDatabase = () => {
     }, 300);
   };
 
-  // --- 6. Selection Logic ---
+  // ── Selection ──────────────────────────────────────────────────────────────
   const handleSelectItem = (code) => {
-    const newSelected = new Set(selectedItems);
-    if (newSelected.has(code)) newSelected.delete(code);
-    else newSelected.add(code);
-    setSelectedItems(newSelected);
+    const s = new Set(selectedItems);
+    s.has(code) ? s.delete(code) : s.add(code);
+    setSelectedItems(s);
   };
 
   const handleSelectAllPage = (pageData) => {
-    const newSelected = new Set(selectedItems);
-    const allSelected = pageData.every((item) =>
-      newSelected.has(item.itemCode),
-    );
-    if (allSelected) {
-      pageData.forEach((item) => newSelected.delete(item.itemCode));
-    } else {
-      pageData.forEach((item) => newSelected.add(item.itemCode));
-    }
-    setSelectedItems(newSelected);
+    const s = new Set(selectedItems);
+    const allSelected = pageData.every((item) => s.has(item.itemCode));
+    if (allSelected) pageData.forEach((item) => s.delete(item.itemCode));
+    else pageData.forEach((item) => s.add(item.itemCode));
+    setSelectedItems(s);
   };
 
   const handleBulkDelete = () => {
     if (confirm(`Delete ${selectedItems.size} selected items?`)) {
-      const newData = data.filter((i) => !selectedItems.has(i.itemCode));
-      saveToStorage(newData);
+      saveToStorage(data.filter((i) => !selectedItems.has(i.itemCode)));
       setSelectedItems(new Set());
     }
   };
 
   const handleDelete = (itemCode) => {
     if (confirm("Delete this item?")) {
-      const newData = data.filter((i) => i.itemCode !== itemCode);
-      saveToStorage(newData);
-      if (selectedItems.has(itemCode)) {
-        const newSel = new Set(selectedItems);
-        newSel.delete(itemCode);
-        setSelectedItems(newSel);
-      }
+      saveToStorage(data.filter((i) => i.itemCode !== itemCode));
+      const s = new Set(selectedItems);
+      s.delete(itemCode);
+      setSelectedItems(s);
     }
   };
 
@@ -523,28 +518,28 @@ const CustomerDatabase = () => {
     setCurrentPage(1);
   }, [searchTerm, filterType]);
 
-  const filteredData = useMemo(() => {
-    return data.filter((item) => {
-      const s = searchTerm.toLowerCase();
-      const matchesSearch =
-        String(item.partyCode).toLowerCase().includes(s) ||
-        String(item.partyDescription).toLowerCase().includes(s) ||
-        String(item.itemCode).toLowerCase().includes(s);
-
-      const matchesType =
-        filterType === "All" ||
-        String(item.partyType).toLowerCase() === filterType.toLowerCase();
-
-      return matchesSearch && matchesType;
-    });
-  }, [data, searchTerm, filterType]);
+  const filteredData = useMemo(
+    () =>
+      data.filter((item) => {
+        const s = searchTerm.toLowerCase();
+        const matchesSearch =
+          String(item.partyCode).toLowerCase().includes(s) ||
+          String(item.partyDescription).toLowerCase().includes(s) ||
+          String(item.itemCode).toLowerCase().includes(s) ||
+          String(item.productSegment).toLowerCase().includes(s);
+        const matchesType =
+          filterType === "All" ||
+          String(item.partyType).toLowerCase() === filterType.toLowerCase();
+        return matchesSearch && matchesType;
+      }),
+    [data, searchTerm, filterType],
+  );
 
   const totalPages = Math.ceil(filteredData.length / ITEMS_PER_PAGE);
   const paginatedData = filteredData.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
     currentPage * ITEMS_PER_PAGE,
   );
-
   const isPageSelected =
     paginatedData.length > 0 &&
     paginatedData.every((item) => selectedItems.has(item.itemCode));
@@ -558,8 +553,6 @@ const CustomerDatabase = () => {
       "bg-green-100 text-green-700",
       "bg-pink-100 text-pink-700",
       "bg-indigo-100 text-indigo-700",
-      "bg-teal-100 text-teal-700",
-      "bg-red-100 text-red-700",
     ];
     return colors[index % colors.length] || "bg-gray-100 text-gray-700";
   };
@@ -568,7 +561,7 @@ const CustomerDatabase = () => {
     <div className="w-full h-full font-sans text-[0.85vw]">
       <div className="flex flex-col gap-[1.5vw] mb-[0.9vw]">
         <div className="flex items-center justify-between bg-white p-[0.7vw] rounded-[0.6vw] shadow-sm border border-gray-200">
-          <div className="relative w-[35vw] flex gap-[0.6vw] items-end">
+          <div className="relative w-[35vw]">
             <Search className="absolute left-[0.8vw] top-1/2 -translate-y-1/2 text-gray-400 w-[1vw] h-[1vw]" />
             <input
               type="text"
@@ -578,67 +571,65 @@ const CustomerDatabase = () => {
               className="w-full pl-[2.5vw] pr-[1vw] h-[2.5vw] border border-gray-300 rounded-[0.8vw] focus:outline-none focus:border-gray-800"
             />
           </div>
-          <div className="flex justify-between items-center">
-            <div className="flex gap-[1vw] items-center">
-              <AnimatePresence>
-                {selectedItems.size > 0 && (
-                  <motion.button
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.9 }}
-                    onClick={handleBulkDelete}
-                    className="flex items-center gap-[0.5vw] bg-red-50 border border-red-200 text-red-600 hover:bg-red-100 px-[1vw] h-[2.4vw] rounded-[0.4vw] shadow-sm transition-all font-semibold"
-                  >
-                    <Trash2 className="w-[1vw] h-[1vw]" /> Delete (
-                    {selectedItems.size})
-                  </motion.button>
-                )}
-              </AnimatePresence>
-              <select
-                value={filterType}
-                onChange={(e) => setFilterType(e.target.value)}
-                className="bg-transparent font-medium text-gray-700 border border-gray-300 p-[0.4vw] rounded-[0.3vw] outline-none cursor-pointer h-[2.4vw]"
-              >
-                <option value="All">All Types</option>
-                {partyTypes.map((type) => (
-                  <option key={type.id} value={type.name}>
-                    {type.name}
-                  </option>
-                ))}
-              </select>
-              <button
-                onClick={() => setShowPartyTypeModal(true)}
-                className="cursor-pointer flex items-center gap-[0.5vw]  border border-blue-300 hover:bg-blue-100 text-blue-700 px-[1vw] h-[2.4vw] rounded-[0.4vw] shadow-sm transition-all"
-                title="Manage Party Types"
-              >
-                <Settings className="w-[1.2vw] h-[1.2vw]" /> Categories
-              </button>
-              <button
-                onClick={() => setShowAddModal(true)}
-                className="cursor-pointer flex items-center gap-[0.5vw] bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-[1vw] h-[2.4vw] rounded-[0.4vw] shadow-sm transition-all"
-              >
-                <UserPlus className="w-[1.2vw] h-[1.2vw]" /> Add
-              </button>
-              <button
-                onClick={() => setShowUploadModal(true)}
-                className="cursor-pointer flex items-center gap-[0.5vw] bg-blue-600 hover:bg-blue-700 text-white px-[1vw] h-[2.4vw] rounded-[0.4vw] shadow-sm transition-all"
-              >
-                <UploadCloud className="w-[1.2vw] h-[1.2vw]" /> Upload
-              </button>
-            </div>
+          <div className="flex gap-[1vw] items-center">
+            <AnimatePresence>
+              {selectedItems.size > 0 && (
+                <motion.button
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  onClick={handleBulkDelete}
+                  className="flex items-center gap-[0.5vw] bg-red-50 border border-red-200 text-red-600 hover:bg-red-100 px-[1vw] h-[2.4vw] rounded-[0.4vw] font-semibold"
+                >
+                  <Trash2 className="w-[1vw] h-[1vw]" /> Delete (
+                  {selectedItems.size})
+                </motion.button>
+              )}
+            </AnimatePresence>
+            <select
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value)}
+              className="bg-transparent font-medium text-gray-700 border border-gray-300 p-[0.4vw] rounded-[0.3vw] outline-none cursor-pointer h-[2.4vw]"
+            >
+              <option value="All">All Types</option>
+              {partyTypes.map((type) => (
+                <option key={type.id} value={type.name}>
+                  {type.name}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={() => setShowPartyTypeModal(true)}
+              className="cursor-pointer flex items-center gap-[0.5vw] border border-blue-300 hover:bg-blue-100 text-blue-700 px-[1vw] h-[2.4vw] rounded-[0.4vw]"
+            >
+              <Settings className="w-[1.2vw] h-[1.2vw]" /> Categories
+            </button>
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="cursor-pointer flex items-center gap-[0.5vw] bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-[1vw] h-[2.4vw] rounded-[0.4vw]"
+            >
+              <UserPlus className="w-[1.2vw] h-[1.2vw]" /> Add
+            </button>
+            <button
+              onClick={() => setShowUploadModal(true)}
+              className="cursor-pointer flex items-center gap-[0.5vw] bg-blue-600 hover:bg-blue-700 text-white px-[1vw] h-[2.4vw] rounded-[0.4vw]"
+            >
+              <UploadCloud className="w-[1.2vw] h-[1.2vw]" /> Upload
+            </button>
           </div>
         </div>
       </div>
 
+      {/* Table */}
       <div className="bg-white rounded-[0.6vw] shadow-sm border border-gray-200 flex flex-col">
         <div className="overflow-y-auto max-h-[73vh] min-h-[73vh] w-full rounded-t-[0.6vw]">
           <table className="w-full text-left border-collapse">
             <thead className="bg-blue-50 sticky top-0 z-10 shadow-sm">
               <tr>
-                <th className="p-[0.6vw] border-b border-r border-gray-200 w-[4%] text-center">
+                <th className="p-[0.6vw] border-b border-r border-gray-200 w-[3%] text-center">
                   <button
                     onClick={() => handleSelectAllPage(paginatedData)}
-                    className="flex items-center justify-center w-full h-full outline-none cursor-pointer"
+                    className="flex items-center justify-center w-full cursor-pointer"
                   >
                     {isPageSelected ? (
                       <CheckSquare className="w-[1.1vw] h-[1.1vw] text-blue-600" />
@@ -647,24 +638,35 @@ const CustomerDatabase = () => {
                     )}
                   </button>
                 </th>
-                <th className="p-[0.6vw] font-semibold text-gray-800 border-b border-r border-gray-200 w-[5%] text-center">
+                <th className="p-[0.6vw] font-semibold text-gray-800 border-b border-r border-gray-200 w-[4%] text-center">
                   S.No
                 </th>
                 <th className="p-[0.6vw] font-semibold text-gray-800 border-b border-r border-gray-200">
                   Party Type
                 </th>
                 <th className="p-[0.6vw] font-semibold text-gray-800 border-b border-r border-gray-200">
+                  Product Segment
+                </th>
+                <th className="p-[0.6vw] font-semibold text-gray-800 border-b border-r border-gray-200">
                   Party Code
                 </th>
                 <th className="p-[0.6vw] font-semibold text-gray-800 border-b border-r border-gray-200">
-                  Party Description 
+                  Party Description
                 </th>
-                
                 <th className="p-[0.6vw] font-semibold text-gray-800 border-b border-r border-gray-200">
                   Item Code
                 </th>
                 <th className="p-[0.6vw] font-semibold text-gray-800 border-b border-r border-gray-200">
                   Item Description
+                </th>
+                <th className="p-[0.6vw] font-semibold text-gray-800 border-b border-r border-gray-200">
+                  Warranty (days)
+                </th>
+                <th className="p-[0.6vw] font-semibold text-gray-800 border-b border-r border-gray-200">
+                  State
+                </th>
+                <th className="p-[0.6vw] font-semibold text-gray-800 border-b border-gray-200">
+                  District/City
                 </th>
               </tr>
             </thead>
@@ -674,31 +676,26 @@ const CustomerDatabase = () => {
                   const serialNumber =
                     (currentPage - 1) * ITEMS_PER_PAGE + i + 1;
                   const isSelected = selectedItems.has(row.itemCode);
-
                   const prevRow = i > 0 ? paginatedData[i - 1] : null;
                   const isSameParty =
                     prevRow && prevRow.partyCode === row.partyCode;
-
                   let rowSpan = 1;
                   if (!isSameParty) {
                     for (let j = i + 1; j < paginatedData.length; j++) {
-                      if (paginatedData[j].partyCode === row.partyCode) {
+                      if (paginatedData[j].partyCode === row.partyCode)
                         rowSpan++;
-                      } else {
-                        break;
-                      }
+                      else break;
                     }
                   }
-
                   return (
                     <tr
                       key={i}
                       className={`transition-colors ${isSelected ? "bg-blue-50" : "hover:bg-gray-50"}`}
                     >
-                      <td className="p-[1.049vw] border-r border-gray-200 text-center">
+                      <td className="p-[1vw] border-r border-gray-200 text-center">
                         <button
                           onClick={() => handleSelectItem(row.itemCode)}
-                          className="flex items-center justify-center w-full h-full outline-none cursor-pointer"
+                          className="flex items-center justify-center w-full cursor-pointer"
                         >
                           {isSelected ? (
                             <CheckSquare className="w-[1.1vw] h-[1.1vw] text-blue-600" />
@@ -707,62 +704,76 @@ const CustomerDatabase = () => {
                           )}
                         </button>
                       </td>
-
                       <td className="p-[0.9vw] text-gray-600 font-medium border-r border-gray-200 text-center">
                         {serialNumber}
                       </td>
-
-                         {!isSameParty && (
+                      {!isSameParty && (
                         <td
                           rowSpan={rowSpan}
-                          className="p-[0.9vw] border-r border-gray-200 bg-white align-center"
+                          className="p-[0.9vw] border-r border-gray-200 bg-white align-middle"
                         >
                           <span
-                            className={`px-2 py-1 rounded text-[0.7vw] font-medium ${getTypeColor(row.partyType)}`}
+                            className={`px-2 py-1 inline-block min-w-[6vw] text-center rounded text-[0.7vw] font-medium ${getTypeColor(row.partyType)}`}
                           >
                             {row.partyType}
                           </span>
                         </td>
                       )}
-
+                      <td className="p-[0.9vw] text-gray-700 border-r border-gray-200">
+                        {row.productSegment}
+                      </td>
                       {!isSameParty && (
                         <td
                           rowSpan={rowSpan}
-                          className="p-[0.9vw] text-gray-800 font-semibold border-r border-gray-200 bg-white align-center"
+                          className="p-[0.9vw] text-gray-800 font-semibold border-r border-gray-200 bg-white align-middle"
                         >
                           {row.partyCode}
                         </td>
                       )}
-
                       {!isSameParty && (
                         <td
                           rowSpan={rowSpan}
-                          className="p-[0.9vw] text-gray-700 border-r border-gray-200 bg-white align-center truncate max-w-[15vw] "
+                          className="p-[0.9vw] text-gray-700 border-r border-gray-200 bg-white align-middle truncate max-w-[14vw]"
                           title={row.partyDescription}
                         >
                           {row.partyDescription}
                         </td>
                       )}
-
-                   
-
                       <td className="p-[0.9vw] text-gray-700 font-mono border-r border-gray-200">
                         {row.itemCode}
                       </td>
-
                       <td
-                        className="p-[0.9vw] text-gray-700 border-r border-gray-200 truncate max-w-[20vw]"
+                        className="p-[0.9vw] text-gray-700 border-r border-gray-200 truncate max-w-[16vw]"
                         title={row.itemDescription}
                       >
                         {row.itemDescription}
                       </td>
+                      <td className="p-[0.9vw] text-gray-700 border-r border-gray-200 text-center font-semibold">
+                        {row.warrantyPeriodDays}
+                      </td>
+                      {!isSameParty && (
+                        <td
+                          rowSpan={rowSpan}
+                          className="p-[0.9vw] text-gray-600 border-r border-gray-200 bg-white align-middle"
+                        >
+                          {row.state || "—"}
+                        </td>
+                      )}
+                      {!isSameParty && (
+                        <td
+                          rowSpan={rowSpan}
+                          className="p-[0.9vw] text-gray-600 bg-white align-middle"
+                        >
+                          {row.districtCity || "—"}
+                        </td>
+                      )}
                     </tr>
                   );
                 })
               ) : (
                 <tr>
                   <td
-                    colSpan="7"
+                    colSpan="11"
                     className="py-[4vw] text-center text-gray-400"
                   >
                     No data found.
@@ -773,6 +784,7 @@ const CustomerDatabase = () => {
           </table>
         </div>
 
+        {/* Pagination */}
         <div className="border-t border-blue-100 p-[0.6vw] bg-blue-50 flex justify-between items-center rounded-b-[0.6vw]">
           <div className="text-[0.8vw] text-gray-500">
             Showing{" "}
@@ -795,7 +807,7 @@ const CustomerDatabase = () => {
             <button
               onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               disabled={currentPage === 1}
-              className="p-[0.4vw] border border-gray-300 rounded-[0.3vw] hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed bg-white shadow-sm cursor-pointer"
+              className="p-[0.4vw] border border-gray-300 rounded-[0.3vw] hover:bg-white disabled:opacity-50 bg-white shadow-sm cursor-pointer"
             >
               <ChevronLeft className="w-[1vw] h-[1vw] text-gray-600" />
             </button>
@@ -809,7 +821,7 @@ const CustomerDatabase = () => {
                   <button
                     key={pNum}
                     onClick={() => setCurrentPage(pNum)}
-                    className={`w-[1.8vw] h-[1.8vw] flex items-center justify-center rounded-[0.3vw] text-[0.8vw] font-medium transition-colors cursor-pointer ${currentPage === pNum ? "bg-blue-600 text-white shadow-sm" : "bg-white border border-gray-300 text-gray-600 hover:bg-gray-50"}`}
+                    className={`w-[1.8vw] h-[1.8vw] flex items-center justify-center rounded-[0.3vw] text-[0.8vw] font-medium cursor-pointer ${currentPage === pNum ? "bg-blue-600 text-white" : "bg-white border border-gray-300 text-gray-600 hover:bg-gray-50"}`}
                   >
                     {pNum}
                   </button>
@@ -819,7 +831,7 @@ const CustomerDatabase = () => {
             <button
               onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages || totalPages === 0}
-              className="p-[0.4vw] border border-gray-300 rounded-[0.3vw] hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed bg-white shadow-sm cursor-pointer"
+              className="p-[0.4vw] border border-gray-300 rounded-[0.3vw] hover:bg-white disabled:opacity-50 bg-white shadow-sm cursor-pointer"
             >
               <ChevronRight className="w-[1vw] h-[1vw] text-gray-600" />
             </button>
@@ -827,6 +839,7 @@ const CustomerDatabase = () => {
         </div>
       </div>
 
+      {/* Party Type Modal */}
       <AnimatePresence>
         {showPartyTypeModal && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center">
@@ -836,8 +849,8 @@ const CustomerDatabase = () => {
               exit={{ opacity: 0, scale: 0.95 }}
               className="bg-white w-[45vw] rounded-[0.8vw] shadow-2xl overflow-hidden max-h-[85vh] flex flex-col"
             >
-              <div className="px-[1vw] py-[0.7vw] border-b border-gray-200 flex justify-between items-center bg-gradient-to-r from-purple-50 to-blue-50">
-                <h2 className="text-[1.2vw] font-semibold text-gray-900 flex items-center gap-[0.5vw]">
+              <div className="px-[1vw] py-[0.7vw] border-b border-gray-200 flex justify-between items-center bg-gray-50">
+                <h2 className="text-[1.2vw] font-semibold text-gray-900">
                   Manage Party Type Categories
                 </h2>
                 <button
@@ -851,10 +864,9 @@ const CustomerDatabase = () => {
                   <X className="w-[1.2vw] h-[1.2vw]" />
                 </button>
               </div>
-
               <div className="p-[1.5vw] flex flex-col gap-[1.5vw] overflow-y-auto">
-                <div className="bg-gradient-to-br from-blue-50 to-purple-50 p-[1vw] rounded-[0.6vw] border border-blue-200">
-                  <h3 className="text-[0.95vw] font-bold text-gray-700 mb-[0.8vw] flex items-center gap-[0.5vw]">
+                <div className="bg-blue-50 p-[1vw] rounded-[0.6vw] border border-blue-200">
+                  <h3 className="text-[0.95vw] font-bold text-gray-700 mb-[0.8vw]">
                     Add New Category
                   </h3>
                   <div className="flex gap-[0.8vw]">
@@ -862,119 +874,105 @@ const CustomerDatabase = () => {
                       type="text"
                       value={newTypeName}
                       onChange={(e) => setNewTypeName(e.target.value)}
-                      onKeyPress={(e) => {
-                        if (e.key === "Enter") handleAddPartyType();
-                      }}
+                      onKeyPress={(e) =>
+                        e.key === "Enter" && handleAddPartyType()
+                      }
                       placeholder="Enter category name..."
-                      className="flex-1 border border-gray-300 rounded-[0.4vw] p-[0.6vw] focus:ring-2 ring-blue-200 outline-none"
+                      className="flex-1 border border-gray-300 rounded-[0.4vw] p-[0.6vw] outline-none"
                     />
                     <button
                       onClick={handleAddPartyType}
-                      className="px-[1.5vw] py-[0.6vw] bg-blue-600 hover:bg-blue-700 text-white rounded-[0.4vw] cursor-pointer font-semibold flex items-center gap-[0.5vw] transition-all shadow-sm"
+                      className="px-[1.5vw] py-[0.6vw] bg-blue-600 hover:bg-blue-700 text-white rounded-[0.4vw] cursor-pointer font-semibold flex items-center gap-[0.5vw]"
                     >
-                      <Plus className="w-[1vw] h-[1vw]" />
-                      Add
+                      <Plus className="w-[1vw] h-[1vw]" /> Add
                     </button>
                   </div>
                 </div>
-
-                {/* Existing Types List */}
                 <div className="bg-white border border-gray-200 rounded-[0.6vw] overflow-hidden">
                   <div className="bg-gray-100 px-[1vw] py-[0.7vw] border-b border-gray-200">
                     <h3 className="text-[0.9vw] font-bold text-gray-700">
                       Existing Categories ({partyTypes.length})
                     </h3>
                   </div>
-                  <div className="max-h-[35vh] overflow-y-auto">
-                    {partyTypes.length > 0 ? (
-                      <div className="divide-y divide-gray-100">
-                        {partyTypes.map((type) => (
-                          <div
-                            key={type.id}
-                            className="p-[1vw] hover:bg-gray-50 transition-colors flex items-center justify-between group"
-                          >
-                            {editingType && editingType.id === type.id ? (
-                              <div className="flex-1 flex gap-[0.8vw] items-center">
-                                <input
-                                  type="text"
-                                  value={editingType.name}
-                                  onChange={(e) =>
-                                    setEditingType({
-                                      ...editingType,
-                                      name: e.target.value,
-                                    })
-                                  }
-                                  onKeyPress={(e) => {
-                                    if (e.key === "Enter") handleUpdatePartyType();
-                                  }}
-                                  className="flex-1 border border-blue-300 rounded-[0.4vw] p-[0.5vw] focus:ring-2 ring-blue-200 outline-none"
-                                  autoFocus
-                                />
-                                <button
-                                  onClick={handleUpdatePartyType}
-                                  className="p-[0.5vw] bg-green-600 hover:bg-green-700 text-white rounded-[0.3vw] cursor-pointer"
-                                  title="Save"
-                                >
-                                  <Check className="w-[1vw] h-[1vw]" />
-                                </button>
-                                <button
-                                  onClick={() => setEditingType(null)}
-                                  className="p-[0.5vw] bg-gray-300 hover:bg-gray-400 text-gray-700 rounded-[0.3vw] cursor-pointer"
-                                  title="Cancel"
-                                >
-                                  <X className="w-[1vw] h-[1vw]" />
-                                </button>
-                              </div>
-                            ) : (
-                              <>
-                                <div className="flex items-center gap-[0.8vw]">
-                                  <span
-                                    className={`px-3 py-1 rounded text-[0.8vw] font-medium ${getTypeColor(type.name)}`}
-                                  >
-                                    {type.name}
-                                  </span>
-                                  <span className="text-[0.75vw] text-gray-400">
-                                    ({data.filter((d) => d.partyType === type.name).length} records)
-                                  </span>
-                                </div>
-                                <div className="flex gap-[0.5vw] opacity-0 group-hover:opacity-100 transition-opacity">
-                                  <button
-                                    onClick={() =>
-                                      setEditingType({ id: type.id, name: type.name })
-                                    }
-                                    className="p-[0.5vw] text-blue-600 hover:bg-blue-50 rounded-[0.3vw] cursor-pointer transition-colors"
-                                    title="Edit"
-                                  >
-                                    <Edit2 className="w-[1vw] h-[1vw]" />
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeletePartyType(type.id)}
-                                    className="p-[0.5vw] text-red-600 hover:bg-red-50 rounded-[0.3vw] cursor-pointer transition-colors"
-                                    title="Delete"
-                                  >
-                                    <Trash2 className="w-[1vw] h-[1vw]" />
-                                  </button>
-                                </div>
-                              </>
-                            )}
+                  <div className="max-h-[35vh] overflow-y-auto divide-y divide-gray-100">
+                    {partyTypes.map((type) => (
+                      <div
+                        key={type.id}
+                        className="p-[1vw] hover:bg-gray-50 flex items-center justify-between group"
+                      >
+                        {editingType && editingType.id === type.id ? (
+                          <div className="flex-1 flex gap-[0.8vw] items-center">
+                            <input
+                              type="text"
+                              value={editingType.name}
+                              onChange={(e) =>
+                                setEditingType({
+                                  ...editingType,
+                                  name: e.target.value,
+                                })
+                              }
+                              onKeyPress={(e) =>
+                                e.key === "Enter" && handleUpdatePartyType()
+                              }
+                              className="flex-1 border border-blue-300 rounded-[0.4vw] p-[0.5vw] outline-none"
+                              autoFocus
+                            />
+                            <button
+                              onClick={handleUpdatePartyType}
+                              className="p-[0.5vw] bg-green-600 hover:bg-green-700 text-white rounded-[0.3vw] cursor-pointer"
+                            >
+                              <Check className="w-[1vw] h-[1vw]" />
+                            </button>
+                            <button
+                              onClick={() => setEditingType(null)}
+                              className="p-[0.5vw] bg-gray-300 hover:bg-gray-400 text-gray-700 rounded-[0.3vw] cursor-pointer"
+                            >
+                              <X className="w-[1vw] h-[1vw]" />
+                            </button>
                           </div>
-                        ))}
+                        ) : (
+                          <>
+                            <div className="flex items-center gap-[0.8vw]">
+                              <span
+                                className={`px-3 py-1 rounded text-[0.8vw] font-medium ${getTypeColor(type.name)}`}
+                              >
+                                {type.name}
+                              </span>
+                              <span className="text-[0.75vw] text-gray-400">
+                                (
+                                {
+                                  data.filter((d) => d.partyType === type.name)
+                                    .length
+                                }{" "}
+                                records)
+                              </span>
+                            </div>
+                            <div className="flex gap-[0.5vw] opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                onClick={() =>
+                                  setEditingType({
+                                    id: type.id,
+                                    name: type.name,
+                                  })
+                                }
+                                className="p-[0.5vw] text-blue-600 hover:bg-blue-50 rounded-[0.3vw] cursor-pointer"
+                              >
+                                <Edit2 className="w-[1vw] h-[1vw]" />
+                              </button>
+                              <button
+                                onClick={() => handleDeletePartyType(type.id)}
+                                className="p-[0.5vw] text-red-600 hover:bg-red-50 rounded-[0.3vw] cursor-pointer"
+                              >
+                                <Trash2 className="w-[1vw] h-[1vw]" />
+                              </button>
+                            </div>
+                          </>
+                        )}
                       </div>
-                    ) : (
-                      <div className="p-[2vw] text-center text-gray-400">
-                        No categories found. Add one above!
-                      </div>
-                    )}
+                    ))}
                   </div>
                 </div>
-
-                <div className="bg-yellow-50 border border-yellow-200 rounded-[0.5vw] p-[0.8vw]">
-                  <p className="text-[0.75vw] text-yellow-800">
-                    <strong>Note:</strong> When you rename a category, all existing records using that category will be automatically updated. Deleting a category will reassign affected records to the first available category.
-                  </p>
-                </div>
               </div>
-
               <div className="px-[1.5vw] py-[1vw] border-t border-gray-200 bg-gray-50 flex justify-end">
                 <button
                   onClick={() => {
@@ -1000,7 +998,7 @@ const CustomerDatabase = () => {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white w-[45vw] rounded-[0.8vw] shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
+              className="bg-white w-[58vw] rounded-[0.8vw] shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
             >
               <div className="px-[1vw] py-[0.7vw] border-b border-gray-200 flex justify-between items-center bg-gray-50">
                 <h2 className="text-[1.2vw] font-semibold text-gray-900">
@@ -1013,16 +1011,15 @@ const CustomerDatabase = () => {
                   <X className="w-[1.2vw] h-[1.2vw]" />
                 </button>
               </div>
-
               <form
                 onSubmit={handleManualSubmit}
                 className="p-[1vw] flex flex-col gap-[1vw] overflow-y-auto"
               >
                 <div className="bg-gray-50 p-[1vw] rounded-[0.5vw] border border-gray-200">
-                  <h3 className="text-[0.9vw] font-bold text-gray-700 mb-[0.5vw]">
+                  <h3 className="text-[0.9vw] font-bold text-gray-700 mb-[0.8vw]">
                     Party Details
                   </h3>
-                  <div className="grid grid-cols-2 gap-[1.5vw] mb-[0.5vw]">
+                  <div className="grid grid-cols-2 gap-[1.5vw] mb-[0.8vw]">
                     <div className="flex flex-col gap-[0.4vw]">
                       <label className="text-gray-600 font-medium">
                         Party Code *
@@ -1062,7 +1059,7 @@ const CustomerDatabase = () => {
                       </select>
                     </div>
                   </div>
-                  <div className="flex flex-col gap-[0.4vw]">
+                  <div className="flex flex-col gap-[0.4vw] mb-[0.8vw]">
                     <label className="text-gray-600 font-medium">
                       Party Description *
                     </label>
@@ -1079,6 +1076,36 @@ const CustomerDatabase = () => {
                       placeholder="Company Name"
                     />
                   </div>
+                  {/* ── NEW: State & District/City ── */}
+                  <div className="grid grid-cols-2 gap-[1.5vw]">
+                    <div className="flex flex-col gap-[0.4vw]">
+                      <label className="text-gray-600 font-medium">State</label>
+                      <input
+                        value={newEntry.state}
+                        onChange={(e) =>
+                          setNewEntry({ ...newEntry, state: e.target.value })
+                        }
+                        className="border p-[0.6vw] rounded-[0.4vw] bg-white focus:ring-2 ring-blue-100 outline-none"
+                        placeholder="e.g. Tamil Nadu"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-[0.4vw]">
+                      <label className="text-gray-600 font-medium">
+                        District / City
+                      </label>
+                      <input
+                        value={newEntry.districtCity}
+                        onChange={(e) =>
+                          setNewEntry({
+                            ...newEntry,
+                            districtCity: e.target.value,
+                          })
+                        }
+                        className="border p-[0.6vw] rounded-[0.4vw] bg-white focus:ring-2 ring-blue-100 outline-none"
+                        placeholder="e.g. Coimbatore"
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 <div className="bg-white border border-gray-200 rounded-[0.5vw] p-[1vw]">
@@ -1094,13 +1121,32 @@ const CustomerDatabase = () => {
                       <PlusCircle className="w-[1vw] h-[1vw]" /> Add Item
                     </button>
                   </div>
-
                   <div className="space-y-[0.8vw]">
                     {newEntry.items.map((item, idx) => (
                       <div
                         key={idx}
                         className="flex gap-[0.5vw] items-center border-b border-gray-100 pb-[0.5vw] last:border-0"
                       >
+                        <div className="flex-1 flex flex-col gap-[0.3vw]">
+                          {idx === 0 && (
+                            <label className="text-[0.75vw] text-gray-500">
+                              Product Segment
+                            </label>
+                          )}
+                          <input
+                            required
+                            value={item.productSegment}
+                            onChange={(e) =>
+                              handleItemChange(
+                                idx,
+                                "productSegment",
+                                e.target.value,
+                              )
+                            }
+                            className="border p-[0.5vw] rounded-[0.3vw] text-[0.85vw]"
+                            placeholder="Segment"
+                          />
+                        </div>
                         <div className="flex-1 flex flex-col gap-[0.3vw]">
                           {idx === 0 && (
                             <label className="text-[0.75vw] text-gray-500">
@@ -1137,7 +1183,28 @@ const CustomerDatabase = () => {
                             placeholder="Description"
                           />
                         </div>
-                        <div className="flex flex-col justify-end ">
+                        <div className="flex-[0.7] flex flex-col gap-[0.3vw]">
+                          {idx === 0 && (
+                            <label className="text-[0.75vw] text-gray-500">
+                              Warranty (days)
+                            </label>
+                          )}
+                          <input
+                            required
+                            type="number"
+                            value={item.warrantyPeriodDays}
+                            onChange={(e) =>
+                              handleItemChange(
+                                idx,
+                                "warrantyPeriodDays",
+                                e.target.value,
+                              )
+                            }
+                            className="border p-[0.5vw] rounded-[0.3vw] text-[0.85vw]"
+                            placeholder="Days"
+                          />
+                        </div>
+                        <div className="flex flex-col justify-end">
                           <button
                             type="button"
                             onClick={() => handleRemoveItemRow(idx)}
@@ -1173,7 +1240,7 @@ const CustomerDatabase = () => {
         )}
       </AnimatePresence>
 
-      {/* Upload Modal - Same as before, no changes needed */}
+      {/* Upload Modal */}
       <AnimatePresence>
         {showUploadModal && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center">
@@ -1201,37 +1268,32 @@ const CustomerDatabase = () => {
                     onDragLeave={handleDragLeave}
                     onDrop={handleDrop}
                     onClick={() => fileInputRef.current.click()}
-                    className={`flex flex-col items-center justify-center h-[20vw] border-[0.2vw] border-dashed rounded-[1vw] transition-all cursor-pointer group ${isDragging ? "border-blue-500 bg-blue-50" : "border-gray-300 bg-gray-50 hover:bg-blue-50"}`}
+                    className={`flex flex-col items-center justify-center h-[20vw] border-[0.2vw] border-dashed rounded-[1vw] cursor-pointer group ${isDragging ? "border-blue-500 bg-blue-50" : "border-gray-300 bg-gray-50 hover:bg-blue-50"}`}
                   >
                     <input
                       type="file"
                       ref={fileInputRef}
                       onChange={handleFileSelect}
                       className="hidden"
-                      accept=".xlsx, .xls"
+                      accept=".xlsx,.xls"
                     />
-                    <div
-                      className={`w-[5vw] h-[5vw]flex items-center justify-center mb-[1vw] transition-transform ${isDragging ? "scale-110 bg-blue-100" : "group-hover:scale-110"}`}
-                    >
-                      <UploadCloud className="w-[2.5vw] h-[2.5vw] text-blue-500 ml-[0.5vw]" />
-                    </div>
-                    <p className="text-[1.1vw] font-semibold text-gray-800 md-[0.2vw] mb-[0.4vw]">
+                    <UploadCloud className="w-[2.5vw] h-[2.5vw] text-blue-500 mb-[1vw]" />
+                    <p className="text-[1.1vw] font-semibold text-gray-800 mb-[0.4vw]">
                       {isDragging
                         ? "Drop file here"
                         : "Click to upload or Drag & Drop"}
                     </p>
-                    <p className="text-gray-700 text-[0.95vw] mb-[0.7vw]">
-                      Format : xlsx{" "}
-                    </p>
-                    <p className="text-gray-700 text-[0.95vw] mb-[0.5vw]">
-                      <span className="font-semibold">Expected Format : </span>
-                      Party Code, Party Description, Party type, Item Code,
-                      Item Description
+                    <p className="text-gray-700 text-[0.9vw] mb-[0.5vw] text-center px-[10%]">
+                      <span className="font-semibold">Expected Columns: </span>
+                      Party Type, Product Segment, Party Code, Party
+                      Description, Item Code, Item Description, Warranty Period,{" "}
+                      <span className="text-blue-600 font-semibold">
+                        State, District/City
+                      </span>
                     </p>
                     <p className="text-blue-600 text-[0.85vw] bg-blue-50 px-[1vw] py-[0.4vw] rounded-[0.3vw] border border-blue-200">
-                      <span className="font-semibold">Note:</span> If a
-                      customer has multiple items, add each item in a new row
-                      with the same Party Code and Description
+                      <span className="font-semibold">Note:</span> Multiple
+                      items per customer = new row with same Party Code
                     </p>
                   </div>
                 )}
@@ -1319,24 +1381,24 @@ const CustomerDatabase = () => {
                       Your customer database has been successfully updated.
                     </p>
                     <div className="grid grid-cols-3 gap-[1.5vw] w-full max-w-[35vw] mb-[3vw]">
-                      <div className="bg-green-50 border border-green-100 rounded-[0.6vw] p-[1.2vw] flex flex-col items-center text-center">
-                        <span className="text-[1.8vw] font-bold text-green-700 leading-none mb-[0.3vw]">
+                      <div className="bg-green-50 border border-green-100 rounded-[0.6vw] p-[1.2vw] flex flex-col items-center">
+                        <span className="text-[1.8vw] font-bold text-green-700">
                           {validationResult.valid}
                         </span>
                         <span className="text-[0.75vw] font-semibold text-green-600 uppercase tracking-wide">
                           Records Added
                         </span>
                       </div>
-                      <div className="bg-blue-50 border border-blue-100 rounded-[0.6vw] p-[1.2vw] flex flex-col items-center text-center">
-                        <span className="text-[1.8vw] font-bold text-blue-600 leading-none mb-[0.3vw]">
+                      <div className="bg-blue-50 border border-blue-100 rounded-[0.6vw] p-[1.2vw] flex flex-col items-center">
+                        <span className="text-[1.8vw] font-bold text-blue-600">
                           {validationResult.duplicates}
                         </span>
                         <span className="text-[0.75vw] font-semibold text-blue-500 uppercase tracking-wide">
                           Duplicates Skipped
                         </span>
                       </div>
-                      <div className="bg-red-50 border border-red-100 rounded-[0.6vw] p-[1.2vw] flex flex-col items-center text-center">
-                        <span className="text-[1.8vw] font-bold text-red-600 leading-none mb-[0.3vw]">
+                      <div className="bg-red-50 border border-red-100 rounded-[0.6vw] p-[1.2vw] flex flex-col items-center">
+                        <span className="text-[1.8vw] font-bold text-red-600">
                           {validationResult.errors}
                         </span>
                         <span className="text-[0.75vw] font-semibold text-red-500 uppercase tracking-wide">
@@ -1346,7 +1408,7 @@ const CustomerDatabase = () => {
                     </div>
                     <button
                       onClick={resetUpload}
-                      className="px-[3vw] py-[0.8vw] text-[0.9vw] font-medium transition-all shadow-lg shadow-gray-200 cursor-pointer"
+                      className="px-[3vw] py-[0.8vw] text-[0.9vw] font-medium border border-gray-300 rounded-[0.4vw] hover:bg-gray-50 cursor-pointer"
                     >
                       Exit
                     </button>
