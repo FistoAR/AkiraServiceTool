@@ -10,9 +10,10 @@ import NavBar from "./components/NavBar";
 import Dashboard from "./pages/dashboard";
 import Customers from "./pages/customers";
 import Tickes from "./pages/tickets";
-import Troubleshoot from "./pages/troubleshoot"
-import Esculation from "./pages/esculation"
+import Troubleshoot from "./pages/troubleshoot";
+import Esculation from "./pages/esculation";
 import { usePageTitle } from "./components/PageTitleNav";
+import MasterPage from "./pages/MasterPage";
 
 function NavBarWithTitle() {
   const pageTitle = usePageTitle();
@@ -34,10 +35,14 @@ function App() {
                   <NavBarWithTitle />
                   <Routes>
                     <Route path="dashboard" element={<Dashboard />} />
+                    <Route
+                      path="masterPage"
+                      element={<MasterPage />}
+                    />
                     <Route path="customers" element={<Customers />} />
                     <Route path="tickets" element={<Tickes />} />
-                    <Route path="troubleshoot" element={<Troubleshoot/>}/>
-                    <Route path="escalation" element={<Esculation/>}/>
+                    <Route path="troubleshoot" element={<Troubleshoot />} />
+                    <Route path="escalation" element={<Esculation />} />
                     <Route path="*" element={<Navigate to="/" replace />} />
                   </Routes>
                 </main>

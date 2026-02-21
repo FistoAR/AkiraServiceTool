@@ -62,6 +62,25 @@ export default function Sidebar() {
             </li>
 
             {isAdmin && (
+              <>
+               <li className="h-[10%] flex items-center">
+                <Link
+                  to="/masterPage"
+                  className={`${linkClasses("/masterPage")} flex items-center gap-[1.3vw] w-full`}
+                >
+                  <img
+                    src="/SidePannelLogos/Activity.svg"
+                    alt="masterPage"
+                    className="w-[1.4vw] h-[1.4vw]"
+                    style={{
+                      filter: location.pathname === "/masterPage" ? activeFilter : "none",
+                    }}
+                  />
+                  <span>Master Access</span>
+                </Link>
+              </li>
+
+
               <li className="h-[10%] flex items-center">
                 <Link
                   to="/customers"
@@ -78,6 +97,8 @@ export default function Sidebar() {
                   <span>Customers</span>
                 </Link>
               </li>
+              </>
+              
             )}
 
             {isAdmin && (
