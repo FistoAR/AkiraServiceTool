@@ -328,7 +328,7 @@ export default function Dashboard() {
     })[p] || "bg-gray-50 text-gray-600";
 
   return (
-    <div className="w-full h-full overflow-y-auto font-sans text-[0.85vw] bg-gray-50">
+    <div className="w-full h-full overflow-y-auto font-sans text-[0.85vw] ">
       {/* ── Header ── */}
       <div className="flex items-center justify-between mb-[1.5vw]">
         <div>

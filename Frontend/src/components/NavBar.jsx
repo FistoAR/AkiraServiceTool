@@ -65,7 +65,7 @@ const NavBar = ({ type }) => {
         <div className="flex justify-between items-start">
           {type === "Service Call" ? (
             <h1 className="text-[1.3vw] font-medium text-gray-900 flex items-center gap-[0.8vw]">
-              <Phone className="w-[1.2vw] h-[1.2vw] text-blue-600" />
+              <Phone className="w-[1.2vw] h-[1.2vw] text-gray-600" />
               Service Call Entry
             </h1>
           ) : (

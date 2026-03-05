@@ -6,8 +6,11 @@ export function usePageTitle() {
   const titles = {
     "/dashboard": "Dashboard",
     "/customers": "Customers Data",
-    "/tickets": "Service Call",
-    "/troubleshoot" : "Troubleshoot"
+    "/escalation": "Escalation",
+    "/serviceCall": "Service Call",
+    "/serviceMaterial": "Service Material",
+    "/productionMaterial": "Production Material",
+    "/troubleshoot": "Troubleshoot"
   };
 
   return titles[location.pathname] || "Dashboard";
