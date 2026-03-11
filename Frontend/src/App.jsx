@@ -13,8 +13,10 @@ import Customers from "./pages/customers";
 import ServiceCall from "./pages/ServiceCall.jsx";
 import ServiceMaterial from "./pages/ServiceMaterial.jsx";
 import ProductionMaterial from "./pages/ProductionMaterial.jsx";
+import ProductionMaterialResponse from "./pages/productionMaterialResponse.jsx";
+import ServiceMaterialResponse from "./pages/serviceMaterialResponse.jsx";
 import Troubleshoot from "./pages/troubleshoot";
-import Esculation from "./pages/esculation";
+import ServiceCallResponse from "./pages/serviceCallResponse";
 import { usePageTitle } from "./components/PageTitleNav";
 import MasterPage from "./pages/MasterPage";
 
@@ -44,8 +46,16 @@ function MainLayout() {
           <Route path="serviceCall" element={<ServiceCall />} />
           <Route path="serviceMaterial" element={<ServiceMaterial />} />
           <Route path="productionMaterial" element={<ProductionMaterial />} />
+          <Route path="serviceCallResponse" element={<ServiceCallResponse />} />
+          <Route
+            path="serviceMaterialResponse"
+            element={<ServiceMaterialResponse />}
+          />
+          <Route
+            path="productionMaterialResponse"
+            element={<ProductionMaterialResponse />}
+          />
           <Route path="troubleshoot" element={<Troubleshoot />} />
-          <Route path="escalation" element={<Esculation />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

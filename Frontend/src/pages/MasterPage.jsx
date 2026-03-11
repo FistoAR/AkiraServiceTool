@@ -27,12 +27,14 @@ import {
   Eye,
   EyeOff,
   Clock,
+  Wrench,
 } from "lucide-react";
 
 // ── Storage Keys ──────────────────────────────────────────────────────────────
 const PARTY_TYPES_KEY = "party_types_v3";
 const EMPLOYEES_KEY = "employees";
 const ESCALATION_FLOWS_KEY = "escalation_flows_v2";
+const SERVICE_MATERIAL_ESCALATION_KEY = "service_material_escalation_v1";
 const CUSTOMER_DB_KEY = "customer_db_grouped_v5";
 export const COLUMN_VIS_KEY = "customer_db_col_visibility_v1";
 
@@ -256,7 +258,8 @@ const HelpTooltip = ({ content, position = "right", width = "16vw" }) => {
 // ─────────────────────────────────────────────────────────────────────────────
 const TABS = [
   { id: "categories", label: "Party Type Categories", icon: Tags },
-  { id: "escalation", label: "Call Escalation Flows", icon: PhoneCall },
+  { id: "escalation", label: "Service Call SLA", icon: PhoneCall },
+  { id: "service-escalation", label: "Service Material SLA", icon: Wrench },
   { id: "columns", label: "Database Columns", icon: Columns },
 ];
 
@@ -506,6 +509,212 @@ const PartyTypesSection = ({ partyTypes, setPartyTypes }) => {
               Yes, Delete
             </button>
           </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Service Material Escalation Flow Section
+// ─────────────────────────────────────────────────────────────────────────────
+const ServiceMaterialEscalationSection = ({ departments }) => {
+  const [flow, setFlow] = useState([]);
+  const [saved, setSaved] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
+  const [origFlow, setOrigFlow] = useState([]);
+  const [dragIdx, setDragIdx] = useState(null);
+  const [dragOver, setDragOver] = useState(null);
+  const [showPicker, setShowPicker] = useState(false);
+
+  useEffect(() => {
+    try {
+      const s = JSON.parse(
+        localStorage.getItem(SERVICE_MATERIAL_ESCALATION_KEY) || "[]",
+      );
+      if (s.length === 0) {
+        const defaults = DEFAULT_DEPTS.map((dept) => ({
+          dept,
+          engineerIds: [],
+          durationHours: 2,
+          durationMins: 0,
+        }));
+        setFlow(defaults);
+        setOrigFlow(JSON.parse(JSON.stringify(defaults)));
+      } else {
+        setFlow(s);
+        setOrigFlow(JSON.parse(JSON.stringify(s)));
+      }
+    } catch {
+      const defaults = DEFAULT_DEPTS.map((dept) => ({
+        dept,
+        engineerIds: [],
+        durationHours: 2,
+        durationMins: 0,
+      }));
+      setFlow(defaults);
+      setOrigFlow(defaults);
+    }
+  }, []);
+
+  useEffect(() => {
+    setHasChanges(JSON.stringify(flow) !== JSON.stringify(origFlow));
+  }, [flow, origFlow]);
+
+  const handleSave = () => {
+    localStorage.setItem(SERVICE_MATERIAL_ESCALATION_KEY, JSON.stringify(flow));
+    const allFlows = JSON.parse(
+      localStorage.getItem(ESCALATION_FLOWS_KEY) || "{}",
+    );
+    allFlows["Service Material"] = flow;
+    localStorage.setItem(ESCALATION_FLOWS_KEY, JSON.stringify(allFlows));
+    setOrigFlow(JSON.parse(JSON.stringify(flow)));
+    setHasChanges(false);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
+  };
+
+  const handleReset = () => {
+    if (!confirm("Reset Service Material escalation to defaults?")) return;
+    const defaults = DEFAULT_DEPTS.map((dept) => ({
+      dept,
+      engineerIds: [],
+      durationHours: 2,
+      durationMins: 0,
+    }));
+    setFlow(defaults);
+  };
+
+  const usedDepts = flow.map((s) => s.dept);
+  const availableToAdd = departments.filter((d) => !usedDepts.includes(d));
+  const availableToSwitch = (cur) =>
+    departments.filter((d) => d === cur || !usedDepts.includes(d));
+
+  const updateStep = (i, u) =>
+    setFlow(flow.map((s, idx) => (idx === i ? u : s)));
+  const removeStep = (i) =>
+    setFlow(flow.filter((_, idx) => idx !== i));
+  const moveStep = (i, dir) => {
+    const f = [...flow],
+      j = i + dir;
+    if (j < 0 || j >= f.length) return;
+    [f[i], f[j]] = [f[j], f[i]];
+    setFlow(f);
+  };
+
+  const addStep = (dept) => {
+    setFlow([
+      ...flow,
+      { dept, engineerIds: [], durationHours: 2, durationMins: 0 },
+    ]);
+    setShowPicker(false);
+  };
+
+  const handleDragStart = (idx) => setDragIdx(idx);
+  const handleDragEnter = (idx) => setDragOver(idx);
+  const handleDragEnd = () => {
+    if (dragIdx !== null && dragOver !== null && dragIdx !== dragOver) {
+      const f = [...flow],
+        temp = f[dragIdx];
+      f[dragIdx] = f[dragOver];
+      f[dragOver] = temp;
+      setFlow(f);
+    }
+    setDragIdx(null);
+    setDragOver(null);
+  };
+
+  return (
+    <div className="p-[1.2vw]">
+      {/* Controls */}
+      <div className="flex items-center justify-between gap-[1vw] mb-[1.2vw]">
+        <div className="flex items-center gap-[0.8vw]">
+          {hasChanges && (
+            <span className="text-[0.7vw] bg-amber-50 border border-amber-200 text-amber-700 px-[0.6vw] py-[0.28vw] rounded-[0.3vw] font-semibold flex items-center gap-[0.3vw]">
+              <AlertTriangle className="w-[0.8vw] h-[0.8vw]" /> Unsaved
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-[0.8vw]">
+          <button
+            type="button"
+            onClick={handleReset}
+            className="flex items-center gap-[0.4vw] px-[0.9vw] py-[0.42vw] border border-slate-200 bg-white hover:bg-slate-50 rounded-[0.4vw] text-slate-600 text-[0.78vw] font-semibold cursor-pointer transition-all"
+          >
+            <RotateCcw className="w-[0.85vw] h-[0.85vw]" /> Reset
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            className={`flex items-center gap-[0.4vw] px-[1.2vw] py-[0.42vw] rounded-[0.4vw] text-[0.8vw] font-semibold cursor-pointer transition-all shadow-sm ${saved ? "bg-emerald-600 text-white" : "bg-blue-600 hover:bg-blue-700 text-white"}`}
+          >
+            {saved ? (
+              <CheckCircle className="w-[0.9vw] h-[0.9vw]" />
+            ) : (
+              <Save className="w-[0.9vw] h-[0.9vw]" />
+            )}
+            {saved ? "Saved!" : "Save"}
+          </button>
+        </div>
+      </div>
+
+      {/* Info */}
+      <div className="bg-blue-50 border border-blue-200 rounded-[0.5vw] p-[0.8vw] mb-[1.2vw] text-[0.75vw] text-blue-800 leading-relaxed">
+        <strong>Service Material Escalation Levels:</strong> Each level auto-escalates
+        to the next team if not resolved within the SLA duration. Drag to reorder,
+        or select specific engineers per level for manual routing.
+      </div>
+
+      {/* Steps */}
+      <div className="space-y-[0.8vw] mb-[1.2vw]">
+        {flow.map((step, idx) => (
+          <StepCard
+            key={idx}
+            step={step}
+            index={idx}
+            total={flow.length}
+            availableToSwitch={availableToSwitch(step.dept)}
+            onUpdate={(u) => updateStep(idx, u)}
+            onRemove={() => removeStep(idx)}
+            onMoveUp={() => moveStep(idx, -1)}
+            onMoveDown={() => moveStep(idx, 1)}
+            onDragStart={() => handleDragStart(idx)}
+            onDragEnter={() => handleDragEnter(idx)}
+            onDragEnd={handleDragEnd}
+            isDragOver={dragOver === idx}
+          />
+        ))}
+      </div>
+
+      {/* Add Level Button */}
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => setShowPicker(!showPicker)}
+          disabled={availableToAdd.length === 0}
+          className="flex items-center gap-[0.4vw] px-[1vw] py-[0.5vw] border-2 border-dashed border-blue-300 hover:border-blue-400 hover:bg-blue-50 disabled:opacity-30 disabled:cursor-not-allowed rounded-[0.4vw] text-blue-600 text-[0.8vw] font-semibold cursor-pointer transition-all"
+        >
+          <Plus className="w-[0.9vw] h-[0.9vw]" /> Add Level
+        </button>
+        {showPicker && availableToAdd.length > 0 && (
+          <div className="absolute top-full left-0 mt-[0.4vw] bg-white border border-slate-200 rounded-[0.4vw] shadow-lg z-40 overflow-hidden min-w-[12vw]">
+            {availableToAdd.map((d) => (
+              <button
+                key={d}
+                type="button"
+                onClick={() => addStep(d)}
+                className="w-full text-left px-[0.8vw] py-[0.5vw] hover:bg-blue-50 text-[0.78vw] font-semibold text-slate-700 border-b border-slate-100 last:border-0 cursor-pointer transition-colors"
+              >
+                {d}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {flow.length === 0 && (
+        <div className="text-center py-[2vw] text-slate-400 text-[0.75vw]">
+          No escalation levels configured
         </div>
       )}
     </div>
@@ -1543,6 +1752,7 @@ const SystemSettingsPage = () => {
   const TAB_ICONS = {
     categories: Tags,
     escalation: PhoneCall,
+    "service-escalation": Wrench,
     columns: Columns,
   };
 
@@ -1616,6 +1826,26 @@ const SystemSettingsPage = () => {
               setFlows={setFlows}
               departments={departments}
             />
+          </div>
+        )}
+
+        {/* ── Tab: Service Material Escalation ── */}
+        {activeTab === "service-escalation" && (
+          <div>
+            <div className="flex items-center gap-[0.8vw] px-[1.2vw] py-[0.7vw] border-b border-slate-100 bg-gradient-to-r from-orange-50/60 to-white">
+              <div className="w-[1.8vw] h-[1.8vw] rounded-[0.4vw] bg-gradient-to-br from-orange-600 to-orange-700 flex items-center justify-center flex-shrink-0">
+                <Wrench className="w-[0.9vw] h-[0.9vw] text-white" />
+              </div>
+              <div>
+                <h2 className="text-[0.9vw] font-bold text-slate-900">
+                  Service Material Inward SLA
+                </h2>
+                <p className="text-[0.7vw] text-slate-500">
+                  Define escalation levels, teams & SLA durations for service material cases
+                </p>
+              </div>
+            </div>
+            <ServiceMaterialEscalationSection departments={departments} />
           </div>
         )}
 
